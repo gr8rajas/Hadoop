@@ -1,0 +1,93 @@
+Loading data from Myql to HDFS
+
+#!/bin/bash
+sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username=root \
+--password=cloudera \
+--m 1 \
+--table=categories \
+--target-dir /cert/mysqltohdfs \
+
+
+
+Export data to a MySQL database from HDFS using Sqoop
+
+#!/bin/sh
+sqoop export \
+--connect jdbc:mysql://localhost:3306/retail_db \
+--username=root \
+--password=cloudera \
+--export-dir /cert/mysqltohdfs/part-m-00000 \
+-m 1 \
+--table hdfscategories \
+--direct \
+
+
+
+Change the delimiter and file format of data during import using Sqoop
+
+
+sqoop import \
+--connect jdbc:mysql://localhost:3306/retail_db \
+--username root \
+--password cloudera \
+-m 1 \
+--table=categories \
+--target-dir /cert/changefiledelim \
+--as-textfile \
+--fields-terminated-by D \
+-z \
+--compression-codec snappy \
+
+
+
+Ingest real-time and near-real time (NRT) streaming data into HDFS using Flume-----------STILL PENDING(Near Realtime)
+
+
+twitter-agent.sources = twitter
+twitter-agent.sinks = hdfs-write
+twitter-agent.channels= MemChannel
+
+twitter-agent.sources.twitter.type = com.cloudera.flume.source.TwitterSource
+twitter-agent.sources.twitter.channels = MemChannel
+twitter-agent.sources.twitter.consumerKey = kBxhubHNb3sPhq1eSoWSdxf5K
+twitter-agent.sources.twitter.consumerSecret= GZE3Lp0WklDmhBCvDSsTSNpf87nM71PxP5jB5g0pZm49g6vXtW
+twitter-agent.sources.twitter.accessToken = 295114956-1gjorJnJymApxvqbHEPDWZALxHxPZsNOVSFFV9mo
+twitter-agent.sources.twitter.accessTokenSecret = fuLmttz2hn4d7HNOSYnYuN3tkEdV2H94zkdo1hDbnjfX4
+twitter-agent.sources.twitter.keywords = trump
+
+twitter-agent.sinks.hdfs-write.channel = MemChannel
+twitter-agent.sinks.hdfs-write.type = hdfs
+twitter-agent.sinks.hdfs-write.hdfs.path = hdfs://localhost:8020/cert/tweets/%Y/%m/%d/%H/
+twitter-agent.sinks.hdfs-write.hdfs.rollInterval = 600
+twitter-agent.sinks.hdfs-write.hdfs.rollCount = 1000
+twitter-agent.sinks.hdfs-write.hdfs.rollSize = 0
+twitter-agent.sinks.hdfs-write.hdfs.writeFormat = Text
+twitter-agent.sinks.hdfs-write.hdfs.fileType = DataStream
+twitter-agent.sinks.hdfs-write.hdfs.batchSize = 1000
+
+twitter-agent.channels.MemChannel.type = memory
+twitter-agent.channels.MemChannel.capacity=1000
+twitter-agent.channels.MemChannel.transactionCapacity = 100
+
+flume-ng agent --name twitter-agent --conf-file /home/cloudera/cert/sampleagent.conf -Dflume.root.logger=INFO,console
+
+
+
+
+Load data into and out of HDFS using the Hadoop File System (FS) commands
+
+
+hadoop fs -get /cert/tweets/2016/01/16/22/FlumeData.1453013770252  /home/cloudera/               Copies data from HDFS to the Local FileSystem
+hadoop fs -copyToLocal /cert/tweets/2016/01/16/22/flumedata  /home/cloudera/                     Copies data from HDFS to the Local FileSystem
+
+hadoop fs -put  /home/cloudera/FlumeData.1453013770252 /cert/tweets/2016/01/16/22/  		 Copies data from Local File Sytem to HDFS
+hadoop fs -copyFromLocal  /home/cloudera/fldata   /cert/tweets/2016/01/16/22/                    Copies data from Local File Sytem to HDFS
+
+hadoop fs -moveFromLocal  /home/cloudera/flumedata   /cert/tweets/2016/01/16/22/     		 Move data from Local File Sytem to HDFS
+hadoop fs -mv /cert/tweets/2016/01/16/22/FlumeData.14530(source)  /cert/tweets/2016/01/(Dest)    Move data from one HDFS Location to one location
+hadoop fs -cp /cert/tweets/2016/01/16/22/fldata   /cert/tweets/2016/01/16/                       Copies data between HDFS Locations
+
+hadoop fs -getmerge /cert/tweets/2016/01/16/22/  FlumeData.1453013513452        Takes a source directory and destination file and concatenates files in src into destination file.
+
