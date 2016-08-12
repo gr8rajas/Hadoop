@@ -1,0 +1,8 @@
+----Connecing Hive & Spark(Querying Hive Databases using Spark)
+
+Copy Hive Site Xml to spark/conf
+Also download DB Connector if you dont have one and place in Spark Classpath
+
+Check:
+scala> val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc);
+scala> sqlContext.sql("show databases").collect().foreach(println);
