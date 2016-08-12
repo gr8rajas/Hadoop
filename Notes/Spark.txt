@@ -1,6 +1,6 @@
 ----Connecing Hive & Spark(Querying Hive Databases using Spark)
 
-Copy Hive Site Xml to spark/conf
+Copy Hive Site Xml to spark/conf  or  Create a Soft Link (ln -s /usr/lib/hive/conf/hive-site.xml  /usr/lib/spark/conf)
 Also download DB Connector if you dont have one and place in Spark Classpath
 
 Check:
