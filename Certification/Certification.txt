@@ -91,3 +91,12 @@ hadoop fs -cp /cert/tweets/2016/01/16/22/fldata   /cert/tweets/2016/01/16/      
 
 hadoop fs -getmerge /cert/tweets/2016/01/16/22/  FlumeData.1453013513452        Takes a source directory and destination file and concatenates files in src into destination file.
 
+
+
+#Spark loading HDFS data into RDD as Text File
+
+val load = sc.textFile("/cert/mysqltohdfsalltables/categories/p*")
+load.collect().foreach(println)
+
+
+
