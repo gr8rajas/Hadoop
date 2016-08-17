@@ -97,6 +97,9 @@ hadoop fs -getmerge /cert/tweets/2016/01/16/22/  FlumeData.1453013513452        
 
 val load = sc.textFile("/cert/mysqltohdfsalltables/categories/p*")
 load.collect().foreach(println)
+# writing abck to HDFS----Here load is an RDD
+load.saveAsTextFile("/cert/spark/textfile")
+load.saveAsObjectFile("/cert/spark/objectfile")
 
 
 
