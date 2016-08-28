@@ -8,3 +8,8 @@ object HelloWorld {
 
 #compiling:
 scalac HelloWorld.scala
+
+#importing classes & packages
+import java.util.{Date, Locale}
+import java.text.DateFormat
+import java.text.DateFormat._
