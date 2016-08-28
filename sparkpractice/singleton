@@ -13,3 +13,5 @@ scalac HelloWorld.scala
 import java.util.{Date, Locale}
 import java.text.DateFormat
 import java.text.DateFormat._
+
+functions are also objects in Scala. 
