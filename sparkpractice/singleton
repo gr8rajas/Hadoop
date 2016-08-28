@@ -1,0 +1,10 @@
+#singleton(Class with a Single Instance)
+
+object HelloWorld {
+  def main(args: Array[String]) {
+    println("Hello, world!")
+  }
+}
+
+#compiling:
+scalac HelloWorld.scala
