@@ -14,4 +14,7 @@ import java.util.{Date, Locale}
 import java.text.DateFormat
 import java.text.DateFormat._
 
-functions are also objects in Scala. 
+#functions are also objects in Scala. 
+
+#Case Classes
+case classes are used to conveniently store and match on the contents of a class. You can construct them without using new.
