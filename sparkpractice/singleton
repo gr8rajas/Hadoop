@@ -34,7 +34,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext._
 object fileconv {
 def main(args: Array[String]) {
-val conf = new SparkConf().setAppName("fileconv")   ---Name of the object should match name of the file
+val conf = new SparkConf().setAppName("Text all")   ---Name of the object should match name of the file
 val sc = new SparkContext(conf)
 Val textFilRDD = sc.textFile("hdfs://.....")
 textFilRDD.saveAsSequenceFile("hdfs dest path")
@@ -42,5 +42,14 @@ textFilRDD.saveAsObjectFile("hdfs path")
 }
 }
 
+#reading sequence file
+object Seeqfile {
+def main (args: Array[String]) {
+val conf = new SparkConf().setAppName("Sequence")
+val sc = new SparkContext(conf)
+val seqfile = sc.sequenceFile("/user/cloudera/spark/departmentsSeq", classOf[IntWritable], classOf[Text])
+             .map(rec => rec.toString()).collect().foreach(println)
+}
+}
 
 
