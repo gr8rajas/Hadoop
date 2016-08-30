@@ -25,11 +25,22 @@ val textFile = sc.textFile("hdfs://...")
 val counts = textFile.flatMap(line => line.split(" "))
                  .map(word => (word, 1))
                  .reduceByKey(_ + _)
-                 
+counts.saveAsTextFile("hdfs://...")            
+
 #Converting a given file in One format to one diff format
 
-Val tf = sc.textFile("hdfs://.....")
-tf.saveAsSequenceFile("hdfs dest path")
-tf.saveAsObjectFile("hdfs path")
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext._
+object fileconv {
+def main(args: Array[String]) {
+val conf = new SparkConf().setAppName("fileconv")   ---Name of the object should match name of the file
+val sc = new SparkContext(conf)
+Val textFilRDD = sc.textFile("hdfs://.....")
+textFilRDD.saveAsSequenceFile("hdfs dest path")
+textFilRDD.saveAsObjectFile("hdfs path")
+}
+}
 
-counts.saveAsTextFile("hdfs://...")
+
+
