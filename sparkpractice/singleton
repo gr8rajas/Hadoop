@@ -18,3 +18,11 @@ import java.text.DateFormat._
 
 #Case Classes
 case classes are used to conveniently store and match on the contents of a class. You can construct them without using new.
+
+# Word Count in Scala-Spark
+
+val textFile = sc.textFile("hdfs://...")
+val counts = textFile.flatMap(line => line.split(" "))
+                 .map(word => (word, 1))
+                 .reduceByKey(_ + _)
+counts.saveAsTextFile("hdfs://...")
