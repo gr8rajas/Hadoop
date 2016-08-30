@@ -25,4 +25,11 @@ val textFile = sc.textFile("hdfs://...")
 val counts = textFile.flatMap(line => line.split(" "))
                  .map(word => (word, 1))
                  .reduceByKey(_ + _)
+                 
+#Converting a given file in One format to one diff format
+
+Val tf = sc.textFile("hdfs://.....")
+tf.saveAsSequenceFile("hdfs dest path")
+tf.saveAsObjectFile("hdfs path")
+
 counts.saveAsTextFile("hdfs://...")
