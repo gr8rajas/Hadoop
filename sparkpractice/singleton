@@ -66,6 +66,25 @@ val seqfile = sc.sequenceFile("/user/cloudera/spark/departmentsSeq", classOf[Int
 }
 }
 
+#Installing Sbt and packaging
+
+Create a File with extenion .sbt 
+Enter the following info 
+
+name := "Project name"
+version := "1.0"
+scalaVersion := "2.10.7"
+libraryDependencies += "org.apache.spark" %% "spark-core" % "2.0.0"
+
+# Your directory layout-----
+
+mkdir -p ./src/main/scala/file.scala
+
+#Packaging it
+sbt package
+
+spark-submit --class "fileconversion" --master local /home/cloudera/scala/target/scala-2.10/fileconversionproject_2.10-1.0.jar
+
 
 
 
