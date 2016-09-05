@@ -117,7 +117,24 @@ import org.apache.spark.SparkConf
       }
       }
       
-spark-submit --class "fileconversion" --master local /home/cloudera/scala/target/scala-2.10/fileconversionproject_2.10-1.0.jar      
+spark-submit --class "fileconversion" --master local /home/cloudera/scala/target/scala-2.10/fileconversionproject_2.10-1.0.jar   
+
+#Writing Data as Object File
+
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkConf
+
+ object objectfileconversion {
+      def main(args:  Array[String]) {
+      val conf = new SparkConf().setAppName("Object Conv")
+      val sc = new SparkContext(conf)
+      val textRDD =  sc.textFile("/cert/spark/textfile/part-*")
+      textRDD.saveAsObjectFile("/cert/spark/objectfileoutput1")
+      }
+      }
+
+
+
 
 
 
