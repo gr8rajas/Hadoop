@@ -87,4 +87,22 @@ spark-submit --class "fileconversion" --master local /home/cloudera/scala/target
 
 
 
+import org.apache.hadoop.io._
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.SequenceFileRDDFunctions
+
+ object exsequencefileconversion {
+      def main(args:  Array[String]) {
+      val conf = new SparkConf().setAppName("Text Conv")
+      val sc = new SparkContext(conf)
+      val data = sc.parallelize(List(("key1", 1), ("Kay2", 2), ("Key3", 2)))
+      data.saveAsSequenceFile("/cert/spark/Sequencefileoutput1")
+      }
+      }
+
+
+
+
 
