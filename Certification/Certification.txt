@@ -133,6 +133,24 @@ import org.apache.spark.SparkConf
       }
       }
 
+#Writing data as Sequencefile(K,V) with NullWritable as key
+
+import org.apache.hadoop.io._
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.SequenceFileRDDFunctions
+
+ object sequencefileconversion {
+      def main(args:  Array[String]) {
+      val conf = new SparkConf().setAppName("Text Conv")
+      val sc = new SparkContext(conf)
+      val textRDD =  sc.textFile("/cert/spark/textfile/part-*")
+      val splitRDD = textRDD.flatMap(line => line.split(","))
+      val seqRDD = splitRDD.map(word => (NullWritable.get(),word))
+      seqRDD.saveAsSequenceFile("/cert/spark/Sequencefileoutput1")
+      }
+
+
 
 
 
