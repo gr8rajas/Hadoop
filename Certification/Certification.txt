@@ -103,7 +103,7 @@ load.saveAsObjectFile("/cert/spark/objectfile")
 
 
 
-#Spark Loading data and writing data as Text File
+#Spark Loading/Reading data and writing data as Text File
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
@@ -119,7 +119,8 @@ import org.apache.spark.SparkConf
       
 spark-submit --class "fileconversion" --master local /home/cloudera/scala/target/scala-2.10/fileconversionproject_2.10-1.0.jar   
 
-#Writing Data as Object File
+
+#Reading data as Text file and Writing it as Object File
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
@@ -133,7 +134,7 @@ import org.apache.spark.SparkConf
       }
       }
 
-#Writing data as Sequencefile(K,V) with NullWritable as key
+#Reading data as Text file and Writing  as Sequencefile(K,V) with NullWritable as key
 
 import org.apache.hadoop.io._
 import org.apache.spark.SparkConf
@@ -150,7 +151,7 @@ import org.apache.spark.rdd.SequenceFileRDDFunctions
       seqRDD.saveAsSequenceFile("/cert/spark/Sequencefileoutput1")
       }
       
-#Writing data as Sequence file with Key
+#Reading data as Text file and Writing as Sequence file with Key
 
 import org.apache.hadoop.io._
 import org.apache.spark.SparkConf
@@ -167,7 +168,7 @@ import org.apache.spark.SparkContext
       }
       }
 
-#Reading and Saving as Sequence file
+#Reading as Sequence file and Saving as Text file
 
 import org.apache.hadoop.io._
 import org.apache.spark.SparkConf
@@ -179,9 +180,10 @@ import org.apache.spark.SparkContext
       val sc = new SparkContext(conf)
       val textRDD =  sc.sequenceFile("/cert/spark/Sequencefileoutputkey" ,classOf[Text], classOf[Text])
       val seqRDD = textRDD.map { case(x,y) => (x.toString(),y.toString()) }
-      seqRDD.saveAsSequenceFile("/cert/spark/Sequencefileoutputkeiyii")
+      seqRDD.saveAsTextFile("/cert/spark/textfileoutputkeiyii")
       }
       }
+
 
 
 
