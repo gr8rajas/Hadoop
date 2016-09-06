@@ -149,6 +149,24 @@ import org.apache.spark.rdd.SequenceFileRDDFunctions
       val seqRDD = splitRDD.map(word => (NullWritable.get(),word))
       seqRDD.saveAsSequenceFile("/cert/spark/Sequencefileoutput1")
       }
+      
+#Writing data as Sequence file with Key
+
+import org.apache.hadoop.io._
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+//import org.apache.spark.rdd.SequenceFileRDDFunctions
+
+ object sequencefileconversion {
+      def main(args:  Array[String]) {
+      val conf = new SparkConf().setAppName("Text Conv")
+      val sc = new SparkContext(conf)
+      val textRDD =  sc.textFile("/cert/mysqltohdfsalltables/departments/part*")
+      val seqRDD = textRDD.map(word => ( word.split(",")(0), word.split(",")(1) ))
+      seqRDD.saveAsSequenceFile("/cert/spark/Sequencefileoutputkey")
+      }
+      }
+
 
 
 
