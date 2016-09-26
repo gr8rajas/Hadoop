@@ -184,7 +184,56 @@ import org.apache.spark.SparkContext
       }
       }
 
+#Joining Two Datasets(Inner Join)
 
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+
+ object joinorders {
+      def main(args:  Array[String]) {
+      val conf = new SparkConf().setAppName("seqText")
+      val sc = new SparkContext(conf)
+      val productRDD =  sc.textFile("/cert/mysqltohdfsalltables/products/part*")
+      val orderRDDext = productRDD.map(s => (s.split(",")(0),s.split(",")(2) ))
+      val orditemRDD = sc.textFile("/cert/mysqltohdfsalltables/order_items/part*").map(x=> x.split(",")).map(x=>(x(2),x(3)))
+      val joinD = orderRDDext.join(orditemRDD)
+      joinD.count
+      joinD.collect()
+      joinD.saveAsTextFile("/cert/spark/join_orditem_product")
+      }
+      }
+
+#Joining Two Datasets(Left Join)
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+
+ object leftjoinorders {
+      def main(args:  Array[String]) {
+      val conf = new SparkConf().setAppName("leftjoin")
+      val sc = new SparkContext(conf)
+      val productRDD =  sc.textFile("/cert/mysqltohdfsalltables/products/part*").map(s => s.split(",")).map(s=>(s(0),s(2)))
+      val orditemRDD = sc.textFile("/cert/mysqltohdfsalltables/order_items/part*").map(x=> x.split(",")).map(x=>(x(2),x(3)))
+      val joinD = productRDD.leftOuterJoin(orditemRDD)
+      joinD.saveAsTextFile("/cert/spark/leftjoin_orditem_product")
+      }
+      }
+
+#Joining Two Datasets(Right Join)--o/p--(906,(Some(Team Golf Tennessee Volunteers Putter Grip),4))
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+
+ object rightjoinorders {
+      def main(args:  Array[String]) {
+      val conf = new SparkConf().setAppName("leftjoin")
+      val sc = new SparkContext(conf)
+      val productRDD =  sc.textFile("/cert/mysqltohdfsalltables/products/part*").map(s => s.split(",")).map(s=>(s(0),s(2)))
+      val orditemRDD = sc.textFile("/cert/mysqltohdfsalltables/order_items/part*").map(x=> x.split(",")).map(x=>(x(2),x(3)))
+      val joinD = productRDD.rightOuterJoin(orditemRDD)
+      joinD.saveAsTextFile("/cert/spark/rightjoin_orditem_product")
+      }
+      }
 
 
 
