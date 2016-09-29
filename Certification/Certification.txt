@@ -237,6 +237,26 @@ import org.apache.spark.SparkContext
 
 
 
+#Joining Two Hive tables through hivecontext(Spark)
+
+import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+
+ object joinhive {
+      def main(args:  Array[String]) {
+      val conf = new SparkConf().setAppName("join hive")
+      val sc = new SparkContext(conf)
+      val sqlContext = new HiveContext(sc)
+      //val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
+      val joinData =  sqlContext.sql("select c.customer_fname,c.customer_lname,o.order_date,o.order_status from cert.orders o join cert.customers c on c.customer_id = o.order_customer_id")
+      joinData.collect().foreach(println)
+      }
+      }
+
+
+
 
 
 
