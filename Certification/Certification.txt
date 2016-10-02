@@ -1,4 +1,4 @@
-Loading data from Myql to HDFS
+#Loading data from Myql to HDFS
 
 #!/bin/bash
 sqoop import \
@@ -11,7 +11,7 @@ sqoop import \
 
 
 
-Export data to a MySQL database from HDFS using Sqoop
+#Export data to a MySQL database from HDFS using Sqoop
 
 #!/bin/sh
 sqoop export \
@@ -25,7 +25,7 @@ sqoop export \
 
 
 
-Change the delimiter and file format of data during import using Sqoop
+#Change the delimiter and file format of data during import using Sqoop
 
 
 sqoop import \
@@ -42,7 +42,7 @@ sqoop import \
 
 
 
-Ingest real-time and near-real time (NRT) streaming data into HDFS using Flume-----------STILL PENDING(Near Realtime)
+#Ingest real-time and near-real time (NRT) streaming data into HDFS using Flume-----------STILL PENDING(Near Realtime)
 
 
 twitter-agent.sources = twitter
@@ -76,20 +76,18 @@ flume-ng agent --name twitter-agent --conf-file /home/cloudera/cert/sampleagent.
 
 
 
-Load data into and out of HDFS using the Hadoop File System (FS) commands
+#Load data into and out of HDFS using the Hadoop File System (FS) commands
 
+hadoop fs -get /cert/tweets/2016/01/16/22/FlumeData.1453013770252  /home/cloudera/         Copies data from HDFS to the Local FileSystem
+hadoop fs -copyToLocal /cert/tweets/2016/01/16/22/flumedata  /home/cloudera/               Copies data from HDFS to the Local FileSystem
 
-hadoop fs -get /cert/tweets/2016/01/16/22/FlumeData.1453013770252  /home/cloudera/               Copies data from HDFS to the Local FileSystem
-hadoop fs -copyToLocal /cert/tweets/2016/01/16/22/flumedata  /home/cloudera/                     Copies data from HDFS to the Local FileSystem
+hadoop fs -put  /home/cloudera/FlumeData.1453013770252 /cert/tweets/2016/01/16/22/  		     Copies data from Local File Sytem to HDFS
+hadoop fs -copyFromLocal  /home/cloudera/fldata   /cert/tweets/2016/01/16/22/              Copies data from Local File Sytem to HDFS
 
-hadoop fs -put  /home/cloudera/FlumeData.1453013770252 /cert/tweets/2016/01/16/22/  		 Copies data from Local File Sytem to HDFS
-hadoop fs -copyFromLocal  /home/cloudera/fldata   /cert/tweets/2016/01/16/22/                    Copies data from Local File Sytem to HDFS
-
-hadoop fs -moveFromLocal  /home/cloudera/flumedata   /cert/tweets/2016/01/16/22/     		 Move data from Local File Sytem to HDFS
-hadoop fs -mv /cert/tweets/2016/01/16/22/FlumeData.14530(source)  /cert/tweets/2016/01/(Dest)    Move data from one HDFS Location to one location
-hadoop fs -cp /cert/tweets/2016/01/16/22/fldata   /cert/tweets/2016/01/16/                       Copies data between HDFS Locations
-
-hadoop fs -getmerge /cert/tweets/2016/01/16/22/  FlumeData.1453013513452        Takes a source directory and destination file and concatenates files in src into destination file.
+hadoop fs -moveFromLocal  /home/cloudera/flumedata   /cert/tweets/2016/01/16/22/     		         Move data from Local File Sytem to HDFS
+hadoop fs -mv /cert/tweets/2016/01/16/22/FlumeData.14530(source)  /cert/tweets/2016/01/(Dest)   Move data from one HDFS Location to one location
+hadoop fs -cp /cert/tweets/2016/01/16/22/fldata   /cert/tweets/2016/01/16/                     Copies data between HDFS Locations
+hadoop fs -getmerge /cert/tweets/2016/01/16/22/  FlumeData.1453013513452                       Takes a source directory and destination file and concatenates files in src into destination file.
 
 
 
@@ -100,7 +98,6 @@ load.collect().foreach(println)
 # writing back to HDFS----Here load is an RDD
 load.saveAsTextFile("/cert/spark/textfile")
 load.saveAsObjectFile("/cert/spark/objectfile")
-
 
 
 #Spark Loading/Reading data and writing data as Text File
@@ -134,6 +131,7 @@ import org.apache.spark.SparkConf
       }
       }
 
+
 #Reading data as Text file and Writing  as Sequencefile(K,V) with NullWritable as key
 
 import org.apache.hadoop.io._
@@ -150,7 +148,8 @@ import org.apache.spark.rdd.SequenceFileRDDFunctions
       val seqRDD = splitRDD.map(word => (NullWritable.get(),word))
       seqRDD.saveAsSequenceFile("/cert/spark/Sequencefileoutput1")
       }
-      
+
+
 #Reading data as Text file and Writing as Sequence file with Key
 
 import org.apache.hadoop.io._
@@ -168,6 +167,7 @@ import org.apache.spark.SparkContext
       }
       }
 
+
 #Reading as Sequence file and Saving as Text file
 
 import org.apache.hadoop.io._
@@ -183,6 +183,7 @@ import org.apache.spark.SparkContext
       seqRDD.saveAsTextFile("/cert/spark/textfileoutputkeiyii")
       }
       }
+
 
 #Joining Two Datasets(Inner Join)
 
@@ -203,6 +204,7 @@ import org.apache.spark.SparkContext
       }
       }
 
+
 #Joining Two Datasets(Left Join)
 
 import org.apache.spark.SparkConf
@@ -219,6 +221,7 @@ import org.apache.spark.SparkContext
       }
       }
 
+
 #Joining Two Datasets(Right Join)--o/p--(906,(Some(Team Golf Tennessee Volunteers Putter Grip),4))
 
 import org.apache.spark.SparkConf
@@ -234,7 +237,6 @@ import org.apache.spark.SparkContext
       joinD.saveAsTextFile("/cert/spark/rightjoin_orditem_product")
       }
       }
-
 
 
 #Joining Two Hive tables through hivecontext(Spark)
@@ -255,7 +257,9 @@ import org.apache.spark.SparkContext
       }
       }
 
+
 #Max, Min and Count of a Specific Column
+
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
@@ -273,10 +277,34 @@ import java.lang.Math
       println("Max Orders %s ".format(maxrdd))
       println("Miin Orders %s " .format(minrdd))
       println("Count is  %s ".format(countrdd))
-
       }
       }
 
+
+#Sum & Avg of a Specific column
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+import java.lang.Math
+
+ object sumavg {
+      def main(args:Array[String]) {
+      val conf = new SparkConf().setAppName("Maxmin")
+      val sc = new SparkContext(conf)
+      val loadrdd = sc.textFile("/cert/mysqltohdfs/order_items/part*")
+      val maprdd = loadrdd.map(x => x.split(",")).map(x=>x(0).toLong)
+      val sumrdd = maprdd.reduce((x,y) =>x+y)
+      //val sum2rdd = maprdd.sum----Returns Exponential
+      val countrdd = maprdd.count()
+      val avgrdd  = sumrdd/countrdd
+
+      println("Total sum of Orders %s ".format(sumrdd))
+      //println("Sum with function %s " .format(sum2rdd))
+      println("Count is  %s ".format(countrdd))
+      println("Average is  %s ".format(avgrdd))
+      }
+      }
 
 
 
