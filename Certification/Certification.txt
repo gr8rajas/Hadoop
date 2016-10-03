@@ -307,6 +307,36 @@ import java.lang.Math
       }
 
 
+#SortByKey and GroupByKey
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+
+ object sortgroup {
+      def main(args: Array[String]) {
+      val conf = new SparkConf().setAppName("sortgroup")
+      val sc = new SparkContext(conf)
+      val loadrdd = sc.textFile("/cert/mysqltohdfs/order_items/part*")
+      val maprdd = loadrdd.map(x => x.split(",")).map(x=>(x(2),x(4).toDouble))
+
+ //groupByKey
+    //Print count of the result of groupby
+       val cgrouprdd = maprdd.groupByKey().distinct().count()
+    //Printing all KV pairs on Screen
+       val grouprdd = maprdd.groupByKey().foreach(println)
+    //Printng count
+       val countrdd = maprdd.count()
+
+ //sortByKey Default--Ascending
+      val sortrdd = maprdd.sortByKey(ascending=false,numPartitions=1).foreach(println)
+      val sortcount = maprdd.sortByKey().count()
+        println("Distinct Count--Grouping %s ".format(cgrouprdd))
+        println("Total Count is  %s ".format(countrdd))
+        println("Sorting is %s " .format(sortcount))
+      }
+      }
+
 
 
 
