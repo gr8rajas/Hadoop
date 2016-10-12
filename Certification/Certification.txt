@@ -338,6 +338,50 @@ import org.apache.spark.SparkContext._
       }
 
 
+#Sample Opeartions on Data with SortBy,ReduceBy & Lambda 
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+
+ object sampprac {
+      def main(args: Array[String]) {
+      val conf = new SparkConf().setAppName("ssoperations")
+      val sc = new SparkContext(conf)
+
+val ordersRDD = sc.textFile("/cert/mysqltohdfs/orders/part*")
+val orderItemsRDD = sc.textFile("/cert/mysqltohdfs/order_items/part*")
+
+
+//Unique String as a Key and entire Row as Value
+//val ordersParsedRDD = ordersRDD.map(x => (x.split(","), x))
+//ordersParsedRDD.collect().foreach(println)
+
+   //Key as one of the Columns and entire Row as Value
+      val ordersParseRDDkey = ordersRDD.map(x=> (x.split(",")(0), x))
+      ordersParseRDDkey.collect().take(5)
+
+      val ordersItemParseRDDkey = orderItemsRDD.map(x=> (x.split(",")(1), x))
+      ordersItemParseRDDkey.first()
+
+      val joinonitemid = ordersParseRDDkey.join(ordersItemParseRDDkey)
+           //joinonitemid.collect().foreach(println)
+
+   //Lambda--- Enter Value and next Portion of Value(Dataset)
+           val mappingcolumns = joinonitemid.map(x=> (x._2._1.split(",")(1) , x._2._2.split(",")(4).toFloat))
+           mappingcolumns.take(10)
+
+   // Total Sum of Orders per day
+
+          val reducebydateRDD = mappingcolumns.reduceByKey((x,y) => x+y).sortByKey()
+          reducebydateRDD.collect().foreach(println)
+
+   //Total Sales Per day
+
+         val  mappingsales  = joinonitemid.map(y=> (y._2._1.split(",")(1), y._2._2.split(",")(3).toInt)).reduceByKey((x,y) => x+y)
+       mappingsales.collect().foreach(println)
+      }
+      }
 
 
 
