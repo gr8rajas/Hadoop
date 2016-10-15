@@ -382,6 +382,32 @@ val orderItemsRDD = sc.textFile("/cert/mysqltohdfs/order_items/part*")
        mappingsales.collect().foreach(println)
       }
       }
+      
+
+#Filter the data
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+
+object filterapp {
+def main(args: Array[String]) {
+val conf = new SparkConf().setAppName("Filterops")
+val sc = new SparkContext(conf)
+
+val loadcust = sc.textFile("/cert/mysqltohdfs/customers/part*").map(x => x.split(",")).map(s => s(7))
+loadcust.collect().foreach(println)
+loadcust.count()
+
+//Filter data
+val filterdate = loadcust.filter(x=>x.contains("TX")).count()
+val filterdateks = loadcust.filter(x=>x.contains("KS")).count()
+ println("Customers in Texas %s" .format(filterdate))
+ println("Customers in Kansas %s" .format(filterdateks))
+}
+}
+
+
 
 
 
