@@ -408,6 +408,33 @@ val filterdateks = loadcust.filter(x=>x.contains("KS")).count()
 }
 
 
+#Filter data into a Smaller Dataset
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+
+object datafilterapp {
+def main(args: Array[String]) {
+val conf = new SparkConf().setAppName("dFilterops")
+val sc = new SparkContext(conf)
+
+val loadcust = sc.textFile("/cert/mysqltohdfs/customers/part*").cache()
+//loadcust.collect().foreach(println)
+loadcust.count()
+
+//Filter data
+// Customers in MN State and Texas State  (|| -or operator  && -And Opeartor)
+val filterdate = loadcust.filter(x=> x.split(",")(7).equals("MN") || x.split(",")(7).toString.contains("TX") )
+filterdate.collect().foreach(println)
+
+//Customer Ids greater than  500
+val cust = loadcust.filter(x =>x.split(",")(0).toInt > 500).take(10).foreach(println)
+
+}
+}
+
+
 
 
 
