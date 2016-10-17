@@ -435,6 +435,43 @@ val cust = loadcust.filter(x =>x.split(",")(0).toInt > 500).take(10).foreach(pri
 }
 
 
+#Sorting with Filter and join Operation
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+
+ object sorted {
+      def main(args: Array[String]) {
+      val conf = new SparkConf().setAppName("sortgroup")
+      val sc = new SparkContext(conf)
+
+  //Load data
+      val loadrdd = sc.textFile("/cert/mysqltohdfs/orders/part*")
+      val maprdd = loadrdd.map( x=> (x.split(",")(0), x))
+
+      val loaditem =sc.textFile("/cert/mysqltohdfs/order_items/part*")
+      val mapitem = loaditem.map( x=> (x.split(",")(1), x))
+
+  //Join Data
+       val joinrdd = maprdd.join(mapitem)
+      joinrdd.take(5).foreach(println)
+
+  //Get the  columns  needed --------Tuple ==>Element
+     val readrdd = joinrdd.map( x =>  (x._2._1.split(",")(3) , x._2._2.split(",")(4)))
+     readrdd.take(10).foreach(println)
+
+ //Filter data - apply operations--------For Tuple x =>x._1
+    val resultrdd =  readrdd.filter( x => x._1.equals("CLOSED") && x._2.toFloat >300 )
+    resultrdd.collect().foreach(println)
+
+  //Sort the Data By Value in Tuple
+     val result1rdd = resultrdd.sortBy(_._2)
+     result1rdd.collect().foreach(println)
+
+      }
+      }
+
 
 
 
