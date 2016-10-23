@@ -474,4 +474,49 @@ import org.apache.spark.SparkContext._
 
 
 
+# Convert an RDD into a Dataframe and Query the Dataset
+
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkConf
+// Import the DataFrame functions API
+// import org.apache.spark.sql.functions._
+
+
+case class orders(order_id:Int,order_date:String,order_customer_id:Int,order_Status:String)
+
+object dfquery {
+      def main(args: Array[String]) {
+         val conf = new SparkConf().setAppName("DiDF")
+         val sc = new SparkContext(conf)
+
+ val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+// this is used to implicitly convert an RDD to a DataFrame.
+import sqlContext.implicits._
+
+val orderRDD = sc.textFile("/cert/mysqltohdfs/orders").map(x => x.split(","))
+orderRDD.collect().take(5)
+
+val mappingRDD = orderRDD.map( x => orders(x(0).toInt,x(1),x(2).toInt,x(3)))
+val ordersDF = mappingRDD.toDF()
+
+ordersDF.registerTempTable("ordersDF")
+
+val Querydata = sqlContext.sql("select * from ordersDF where order_Status LIKE '%CLOSED%' ")
+Querydata.collect()foreach(println)
+
+}
+}
+
+
+#SBT file with Sparksql
+name := "dfquery"
+version := "1.0"
+scalaVersion := "2.10.4"
+libraryDependencies ++= Seq(
+                       "org.apache.spark" %% "spark-sql" % "1.3.0",
+                       "org.apache.spark" %% "spark-core" % "1.3.0"
+)
+
+
+
 
