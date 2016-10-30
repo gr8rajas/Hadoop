@@ -565,3 +565,17 @@ loadFile.map(lambda x: tuple(x.split(",", 1))).saveAsSequenceFile("/cert/pyspark
 #converted into Byte Stream
 loadFile.saveAsPickleFile("/cert/pyspark/seqcustomersPckle")
 
+
+#Reading a Sequence File
+
+from pyspark import SparkConf,SparkContext
+
+conf = SparkConf().setAppName("readSeq")
+
+sc = SparkContext(conf=conf)
+
+readseqFileRDD = sc.sequenceFile("/cert/pyspark/seqcustomerskey/part*")
+
+for line in readseqFileRDD.collect():
+ print line
+
