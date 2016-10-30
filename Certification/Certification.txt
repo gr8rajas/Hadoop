@@ -519,4 +519,49 @@ libraryDependencies ++= Seq(
 
 
 
+####  Python--Pyspark  ####
+
+#Load data from HDFS  and Print
+
+from pyspark import SparkContext, SparkConf
+
+conf  = SparkConf().setAppName("loaddate").setMaster("local")
+sc = SparkContext(conf = conf)
+distFile = sc.textFile("/cert/mysqltohdfs/customers/part*")
+for line in distFile.collect():
+ print(line)
+
+#Submitting Spark Application
+spark-submit --master local  savetext.py
+
+
+#Load data from HDFS and Store data as Text into HDFS
+
+
+from pyspark import SparkConf, SparkContext
+conf = SparkConf().setAppName("save").setMaster("local")
+sc = SparkContext(conf=conf)
+loadFile = sc.textFile("/cert/mysqltohdfs/customers/")
+savefile = loadFile.saveAsTextFile("/cert/pyspark/textcustomers")
+for line in loadFile.collect():
+ print line
+ 
+ 
+#Load data from HDFS and Store data as Sequence File into HDFS
+
+
+from pyspark import SparkConf,SparkContext
+conf = SparkConf().setAppName("saveseq").setMaster("local")
+sc = SparkContext(conf=conf)
+
+loadFile = sc.textFile("/cert/mysqltohdfs/customers/part*")
+
+#Null as the Key
+loadFile.map(lambda x: (None,x)).saveAsSequenceFile("/cert/pyspark/seqcustomersNone")
+
+#Give a Unique Row number as Key
+loadFile.map(lambda x: tuple(x.split(",", 1))).saveAsSequenceFile("/cert/pyspark/seqcustomerskey")
+
+#converted into Byte Stream
+loadFile.saveAsPickleFile("/cert/pyspark/seqcustomersPckle")
 
