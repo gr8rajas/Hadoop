@@ -583,7 +583,9 @@ from pyspark import SparkContext, SparkConf
 conf = SparkConf().setAppName("join").setMaster("local")
 sc = SparkContext(conf=conf)
 
-#Will not get u' in the ouptut(u' is a String Literal)
+#Will not get u' in the ouptut(u' is a String Literal ,used to denote that object is unicode object. 
+# It decodes the characters according to the source encoding declaration.)
+#--without u'--it is a byte String(without encoding)
 ordRDD = sc.textFile("/cert/mysqltohdfs/orders/part*",use_unicode=False)
 orditemsRDD = sc.textFile("/cert/mysqltohdfs/order_items/part*",use_unicode=False)
 
