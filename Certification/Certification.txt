@@ -521,7 +521,7 @@ libraryDependencies ++= Seq(
 
 ####  Python--Pyspark  ####
 
-#Load data from HDFS  and Print
+######Load data from HDFS  and Print
 
 from pyspark import SparkContext, SparkConf
 
@@ -536,7 +536,7 @@ spark-submit --master local  savetext.py
 pyspark file.py
 
 
-#Load data from HDFS and Store data as Text into HDFS
+######Load data from HDFS and Store data as Text into HDFS
 
 
 from pyspark import SparkConf, SparkContext
@@ -548,7 +548,7 @@ for line in loadFile.collect():
  print line
  
  
-#Load data from HDFS and Store data as Sequence File into HDFS
+########Load data from HDFS and Store data as Sequence File into HDFS
 
 
 from pyspark import SparkConf,SparkContext
@@ -567,7 +567,7 @@ loadFile.map(lambda x: tuple(x.split(",", 1))).saveAsSequenceFile("/cert/pyspark
 loadFile.saveAsPickleFile("/cert/pyspark/seqcustomersPckle")
 
 
-#Reading a Sequence File
+####Reading a Sequence File
 
 from pyspark import SparkConf,SparkContext
 conf = SparkConf().setAppName("readSeq")
@@ -577,7 +577,7 @@ for line in readseqFileRDD.collect():
  print line
  
  
- #Join Operation
+#####Join Operation
  
 from pyspark import SparkContext, SparkConf
 conf = SparkConf().setAppName("join").setMaster("local")
@@ -600,3 +600,23 @@ joinRDD = ordersd.join(itemsd)
 for line in joinRDD.collect():
  print line
 
+
+#####Left Join Operation
+
+
+from pyspark import SparkContext, SparkConf
+conf = SparkConf().setAppName("join").setMaster("local")
+sc = SparkContext(conf=conf)
+
+ordRDD = sc.textFile("/cert/mysqltohdfs/orders/part*",use_unicode=False)
+custRDD = sc.textFile("/cert/mysqltohdfs/customers/part*",use_unicode=False)
+
+orders = ordRDD.map(lambda x: x.split(",")).map(lambda x:(x[2],x))
+items = custRDD.map(lambda x:x.split(",")).map(lambda x:(x[0],(x[1],x[2])))
+joinRDD = orders.leftOuterJoin(items)
+
+for line in joinRDD.collect():
+ print line
+#count
+cnt = joinRDD.count()
+print cnt
