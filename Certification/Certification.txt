@@ -644,6 +644,7 @@ print totalitems
 Maxorddate = splitRDD.map(lambda x:x[order_date]).reduce(max)
 print Maxorddate
 #Min Order Data
-Minorddate = splitRDD.map(lambda x:x[order_date]).reduce(min)
+#----Can use with reduce also---Minorddate = splitRDD.map(lambda x:x[order_date]).reduce(min)
+Minorddate = splitRDD.map(lambda x:x[order_date]).min()
 print Minorddate
 
