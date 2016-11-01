@@ -620,3 +620,30 @@ for line in joinRDD.collect():
 #count
 cnt = joinRDD.count()
 print cnt
+
+
+#####Max,Min,Count
+
+from pyspark import SparkContext,SparkConf
+conf = SparkConf().setAppName("Maxmin").setMaster("local")
+sc = SparkContext(conf=conf)
+
+ordRDD = sc.textFile("/cert/mysqltohdfs/orders/part*")
+
+#map Input Variables
+order_id = 0
+order_date = 1
+order_customer_is = 2
+order_status = 3
+
+splitRDD = ordRDD.map(lambda x:x.split(","))
+#Count
+totalitems = splitRDD.map(lambda x:x[order_id]).distinct().count()
+print totalitems
+#Max Order Date
+Maxorddate = splitRDD.map(lambda x:x[order_date]).reduce(max)
+print Maxorddate
+#Min Order Data
+Minorddate = splitRDD.map(lambda x:x[order_date]).reduce(min)
+print Minorddate
+
