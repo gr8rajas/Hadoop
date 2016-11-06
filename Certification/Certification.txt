@@ -673,3 +673,28 @@ print Tot
 avg = float(Tot/cnt)
 print avg
 
+
+####Filter operation
+
+from pyspark import SparkConf,SparkContext
+conf = SparkConf().setAppName("filter").setMaster("local")
+sc = SparkContext(conf=conf)
+
+ordrdd = sc.textFile("/cert/mysqltohdfs/orders/part*",use_unicode=False)
+for line in ordrdd.take(5):
+ print line
+
+splitrdd = ordrdd.map(lambda x: x.split(","))
+#Filter-Equal
+filterrdd = splitrdd.filter(lambda x: x[3] == "COMPLETE")
+for line in filterrdd.collect():
+ print line
+#Equal
+for line in splitrdd.filter(lambda x: x[1] == "2014-07-21 00:00:00.0").collect():
+ print line
+#Greater
+greaterrdd = splitrdd.filter(lambda x: x[1] > '2014-07-21 00:00:00')
+for line in greaterrdd.collect():
+ print line
+
+
