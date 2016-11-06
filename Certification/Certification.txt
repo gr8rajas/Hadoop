@@ -683,7 +683,6 @@ sc = SparkContext(conf=conf)
 ordrdd = sc.textFile("/cert/mysqltohdfs/orders/part*",use_unicode=False)
 for line in ordrdd.take(5):
  print line
-
 splitrdd = ordrdd.map(lambda x: x.split(","))
 #Filter-Equal
 filterrdd = splitrdd.filter(lambda x: x[3] == "COMPLETE")
