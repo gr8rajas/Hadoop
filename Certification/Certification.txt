@@ -648,3 +648,28 @@ print Maxorddate
 Minorddate = splitRDD.map(lambda x:x[order_date]).min()
 print Minorddate
 
+
+######Count, Average & Sum
+
+from pyspark import SparkConf,SparkContext
+conf = SparkConf().setAppName("Avg").setMaster("local")
+sc = SparkContext(conf=conf)
+
+ordirdd = sc.textFile("/cert/mysqltohdfs/order_items/part*")
+splitrdd = ordirdd.map(lambda x:x.split(","))
+for line in ordirdd.take(8):
+ print line
+
+#Count
+cnt = splitrdd.map(lambda x:int(x[0])).count()
+print cnt
+#Sum
+total = splitrdd.map(lambda x:float(x[4]))
+for line in total.take(8):
+ print line
+Tot = total.sum()
+print Tot
+#Avg
+avg = float(Tot/cnt)
+print avg
+
