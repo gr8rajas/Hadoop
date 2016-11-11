@@ -734,3 +734,27 @@ aggRDD = newmaprdd.aggregateByKey(0, lambda x,y : x+1 , lambda x,y : x+y )
 for line in aggRDD.collect():
  print line
 
+
+#Convert an RDD into a Dataframe and Query the Dataset
+
+from pyspark import SparkContext
+#from pyspark import SparkConf
+from pyspark.sql import SQLContext,Row
+
+sc = SparkContext()
+sqlContext = SQLContext(sc)
+
+ordRDD = sc.textFile("/cert/mysqltohdfs/orders/p*")
+splitRDD = ordRDD.map(lambda x: x.split(","))
+#convert each line into a Row
+orders = splitRDD.map(lambda x: Row(order_id=x[0],order_date=x[1],order_customer_id=x[2],order_status=x[3]))
+
+# Infer the schema, and register the DataFrame as a table.
+schemadf = sqlContext.inferSchema(orders)
+schemadf.registerTempTable("orders")
+
+dfframe = sqlContext.sql("Select * from orders where order_status='COMPLETE'")
+
+for line in dfframe.collect():
+ print line
+
