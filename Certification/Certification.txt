@@ -735,7 +735,7 @@ for line in aggRDD.collect():
  print line
 
 
-#Convert an RDD into a Dataframe and Query the Dataset
+#####Convert an RDD into a Dataframe and Query the Dataset
 
 from pyspark import SparkContext
 #from pyspark import SparkConf
@@ -756,5 +756,28 @@ schemadf.registerTempTable("orders")
 dfframe = sqlContext.sql("Select * from orders where order_status='COMPLETE'")
 
 for line in dfframe.collect():
+ print line
+
+
+#### Rank Query in Spark ##
+
+from pyspark import SparkContext
+from pyspark.sql import SQLContext,Row
+from pyspark.sql import HiveContext
+sc = SparkContext()
+sqlContext = HiveContext(sc)
+
+productRDD = sc.textFile("/cert/mysqltohdfs/products/p*")
+splitRDD = productRDD.map(lambda x:x.split(","))
+
+products = splitRDD.map(lambda x: Row(product_id=x[0],product_category_id=x[1],product_name=x[2],product_description=x[3],product_price = x[4],product_image=x[5]))
+
+# Infer the schema, and register the DataFrame as a table
+schemadff = sqlContext.inferSchema(products)
+schemadff.registerTempTable("products")
+
+Query = sqlContext.sql("select *, rank() over (partition by product_category_id order by product_price desc)  from products")
+
+for line in Query.collect():
  print line
 
