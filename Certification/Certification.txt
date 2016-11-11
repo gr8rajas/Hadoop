@@ -730,7 +730,7 @@ newmaprdd = splitRDD.map( lambda x: (str(x[3]),str(x[1])))
 for line in newmaprdd.take(5):
  print line
 
-aggRDD = newmaprdd.aggregateByKey(0, lambda k,v : k+1 , lambda k,v : k+v )
+aggRDD = newmaprdd.aggregateByKey(0, lambda x,y : x+1 , lambda x,y : x+y )
 for line in aggRDD.collect():
  print line
 
