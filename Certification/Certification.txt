@@ -780,4 +780,98 @@ Query = sqlContext.sql("select *, rank() over (partition by product_category_id 
 
 for line in Query.collect():
  print line
+ 
+ 
+### #Importing a MYSQL Table as a Avro datafile to HDFS
+ 
+ sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username=root \
+--password=cloudera \
+--m 1 \
+--table=categories \
+--as-avrodatafile \
+--target-dir /cert/mysqltohdfs/avro/categories \
+
+####Creating a Hive Table on Avro Data File with Schema
+
+create EXTERNAL table cert.order_items
+(
+
+ order_item_id            int,
+ order_item_order_id      int,
+ order_item_product_id    int,
+ order_item_quantity      int,
+ order_item_subtotal      float,    
+ order_item_product_price float
+)
+STORED AS AVRO
+LOCATION '/cert/mysqltohdfs/avro/order_items';
+
+
+###Creating a Hive Table on Avro Data File with AVRO Schema
+
+
+create EXTERNAL table cert.products
+ ROW FORMAT SERDE
+  'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+  STORED AS INPUTFORMAT
+  'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+  OUTPUTFORMAT
+  'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+LOCATION '/cert/mysqltohdfs/avro/products'
+tblproperties('avro.schema.literal'='{
+  "type" : "record",
+  "name" : "sqoop_import_products",
+  "doc" : "Sqoop import of products",
+  "fields" : [ {
+    "name" : "product_id",
+    "type" : [ "int", "null" ],
+    "columnName" : "product_id",
+    "sqlType" : "4"
+  }, {
+    "name" : "product_category_id",
+    "type" : [ "int", "null" ],
+    "columnName" : "product_category_id",
+    "sqlType" : "4"
+  }, {
+    "name" : "product_name",
+    "type" : [ "string", "null" ],
+    "columnName" : "product_name",
+    "sqlType" : "12"
+  }, {
+    "name" : "product_description",
+    "type" : [ "string", "null" ],
+    "columnName" : "product_description",
+    "sqlType" : "12"
+  }, {
+    "name" : "product_price",
+    "type" : [ "float", "null" ],
+    "columnName" : "product_price",
+    "sqlType" : "7"
+  }, {
+    "name" : "product_image",
+    "type" : [ "string", "null" ],
+    "columnName" : "product_image",
+    "sqlType" : "12"
+  } ],
+  "tableName" : "products"
+}
+');
+
+
+#####Create a table on Avro Data File with Avro Schema File
+
+create EXTERNAL table cert.avrocategories
+(
+category_id int,
+category_dept_id int,
+category_name string
+)
+STORED AS AVRO
+LOCATION '/cert/mysqltohdfs/avro/categories'
+TBLPROPERTIES('avro.schema.url'='hdfs://localhost/cert/mysqltohdfs/avro/sqoop_import_categories.avsc');
+
+
+
 
