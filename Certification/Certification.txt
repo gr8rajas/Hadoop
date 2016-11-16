@@ -877,5 +877,24 @@ TBLPROPERTIES('avro.schema.url'='hdfs://localhost/cert/mysqltohdfs/avro/sqoop_im
 avro-tools getschema part-m-00000.avro >new.txt
 
 
+###Create an Partition Table(Dynamic) and imporove Query Performance
+
+CREATE EXTERNAL TABLE ORDERS_PART
+(
+order_id int,
+order_date TIMESTAMP,
+order_customer_id int,
+order_status varchar(45)
+)
+PARTITIONED BY(year string,month string)
+LOCATION '/cert/mysqltohdfs/orders/';
+
+###Select Records from Main table and insert into Parition Table
+insert overwrite table orders_part partition(year,month) select o.*,year(o.order_date),month(o.order_date) from orders o ;
+
+
+
+
+
 
 
