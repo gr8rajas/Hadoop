@@ -892,7 +892,7 @@ LOCATION '/cert/mysqltohdfs/orders/';
 ###Select Records from Main table and insert into Parition Table
 insert overwrite table orders_part partition(year,month) select o.*,year(o.order_date),month(o.order_date) from orders o ;
 
-###Creting an Avro Schema File
+###Creating an Avro Schema File
 
 {"namespace": "sqoop_import_avrosample.avsc",
  "type": "record",
@@ -904,8 +904,13 @@ insert overwrite table orders_part partition(year,month) select o.*,year(o.order
  ]
 }
 
+CREATE EXTERNAL TABLE AVROSAMPLE
+STORED AS AVRO
+LOCATION '/cert/mysqltohdfs/categories/'
+tblproperties('avro.schema.url'='hdfs://localhost/cert/mysqltohdfs/avro/sqoop_import_avrosample.avsc')
 
-####IMPALA####
+
+####       IMPALA           ####
 Same as Hive Command
 Refresh tables to detect any metadata changes
  INVALIDATE METADATA waits to reload the metadata when needed for a subsequent query, but reloads all the metadata for the table, which can be an expensive operation, especially for large tables with many partitions. REFRESH reloads the metadata immediately, but only loads the block location data for newly added data files, making it a less expensive operation overall. 
