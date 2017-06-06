@@ -6,3 +6,46 @@ Also download DB Connector if you dont have one and place in Spark Classpath
 Check:
 scala> val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc);
 scala> sqlContext.sql("show databases").collect().foreach(println);
+
+
+/*Creating Arrays and Lists in Scala*/
+
+val dataA = Array(1, 2, 3, 4, 5)
+val dataL = List(1,2,3,4)
+
+########################33
+data.size
+data.sum
+
+
+/* Creating RDD*/
+val dataRDD = sc.parallelize(data)
+dataRDD.count()
+dataRDD.reduce((acc,value) => acc+value)
+
+
+val dataRDD = sc.textFile("file:///root/spark_demo/scala/data")
+dataRDD.map(rec => rec.toInt).reduce((acc, value) => acc + value)
+
+
+val dataRDD = sc.textFile("hdfs://sandbox.hortonworks.com:8020/user/root/spark_demo/scala/data")
+dataRDD.map(rec => rec.toInt).reduce((acc, value) => acc + value)
+
+
+
+sparkConf.set("spark.cores.max", "4")
+    sparkConf.set("spark.serializer", classOf[KryoSerializer].getName)
+    sparkConf.set("spark.sql.tungsten.enabled", "true")
+    sparkConf.set("spark.eventLog.enabled", "true")
+    sparkConf.set("spark.app.id", "Logs")
+    sparkConf.set("spark.io.compression.codec", "snappy")
+    sparkConf.set("spark.rdd.compress", "true")
+
+
+##############DF to CSV
+
+myDF.registerTempTable("myTempTable")
+val myDFTable = sqlContext.sql("SELECT col1, col2, col3 FROM myTempTable WHERE col2 > 1000")
+myDFTable.map(x => x(0) + "," + x(1) + "," + x(2)).saveAsTextFile("output.csv")
+
+df.map(x => x.mkString("|")).saveAsTextFile("file.csv") 
