@@ -1,0 +1,1160 @@
+/* Set environmental parameters for Pig script
+*1.  pig.cachedbag.memusage = NNN - Set Memory Usage for all bags/relations in this script.
+*                                                                                                                        Default is set to 20% (0.2) of available memory.
+*2.  Can set Multi-query execution. It is turned on by default.
+*    e.g  pig -M CCMAcquire.pig
+*
+*3. Compress the Results of Intermediate relations using LZO compression
+*   set pig.tmpfilecompression = true
+*   set pig.tmpfilecompression.codec = "lzo"
+*
+*4. Set Parallelism to specify number of reducers
+*   set default parallel NN
+*   else by default Pig sets the number of reducers based on the size of the input data.
+*
+*5. Set values for bytes processed by Reducer,
+*    pig.exec.reducers.bytes.per.reducer - Defines the number of input bytes per reduce; default value is 1000*1000*1000 (1GB).
+*        pig.exec.reducers.max - Defines the upper bound on the number of reducers; default is 999.
+*    reducers = MIN (pig.exec.reducers.max, total input size (in bytes) / bytes per reducer)
+*
+*/
+
+SET job.name 'CCM DATALOAD';
+SET default_parallel '$PARALLELISM';
+SET hive.metastore.uris '$METASTORE_URIS';
+SET mapreduce.job.queuename '$MR_QUEUENAME';
+--set pig.tmpfilecompression '$TMPFILECOMPRESSION';
+--set pig.tmpfilecompression.codec 'lzo';
+SET mapred.min.split.size  7584354560; --268435456;
+SET mapred.max.split.size  7584354560; --268435456;
+SET pig.noSplitCombination true;
+set mapreduce.reduce.memory.mb 8192;
+set mapreduce.reduce.java.opts -Xmx7168m;
+set mapreduce.map.memory.mb 8192;
+set mapreduce.map.java.opts -Xmx7168m;
+
+REGISTER 'ccm_udfs.py' USING streaming_python AS udf;
+
+--set io.compression.codec.lzo.class 'com.hadoop.compression.lzo.LzoCodec';
+
+/* This section will load data from data lake tables,
+ * capture record count for each table and load in CCM Hbase tracking table
+ */
+-- Load Hive tables in Pig using HCatalog
+LANG_PREF_TYP_O = LOAD '$DBNAME.f6435dbp_lang_pref_typ_snapshot' USING org.apache.hive.hcatalog.pig.HCatLoader();
+LANG_PREF_TYP = FOREACH LANG_PREF_TYP_O GENERATE
+                lang_typ_cd as lang_typ_cd,
+                lang_typ_txt as lang_typ_txt;
+
+CNSM_LANG_PREF_O = LOAD '$DBNAME.f6435dbp_cnsm_lang_pref_snapshot' USING org.apache.hive.hcatalog.pig.HCatLoader();
+CNSM_LANG_PREF = FOREACH CNSM_LANG_PREF_O GENERATE
+                 cnsm_id as cnsm_id,
+                 lang_typ_cd as lang_typ_cd;
+
+LANG_TYP_TXT_J = JOIN LANG_PREF_TYP BY lang_typ_cd, CNSM_LANG_PREF BY lang_typ_cd USING 'replicated' PARALLEL $PARALLELISM;
+
+L_CNSM_SRCH_O   = LOAD '$DBNAME.f6435dbp_l_cnsm_srch_snapshot' USING org.apache.hive.hcatalog.pig.HCatLoader();
+L_CNSM_SRCH_E   = FOREACH L_CNSM_SRCH_O GENERATE
+                src_cdb_xref_id as src_cdb_xref_id,
+                cnsm_id as cnsm_id,
+                lgcy_src_id as lgcy_src_id,
+                lgcy_alt_mbr_id as lgcy_alt_mbr_id,
+                src_cd as src_cd,
+                current_updt_ts as current_updt_ts,
+                src_tmstmp as src_tmstmp,
+                fst_nm as fst_nm,
+                lst_nm as lst_nm,
+                midl_init_txt as midl_init_txt,
+                gdr_typ_cd as gdr_typ_cd,
+                bth_dt as bth_dt,
+                row_sts_cd as row_sts_cd,
+                row_user_id as row_user_id;
+--              dept_nbr as dept_nbr;
+
+L_CNSM_SRCH = FILTER L_CNSM_SRCH_E BY TRIM(row_user_id) != 'LINK/UNLINK';
+
+L_COV_PRDT_DT_O         = LOAD '$DBNAME.f6435dbp_l_cov_prdt_dt_snapshot' USING org.apache.hive.hcatalog.pig.HCatLoader();
+L_COV_PRDT_DT_E = FOREACH L_COV_PRDT_DT_O GENERATE
+                src_cdb_xref_id as src_cdb_xref_id,
+                govt_pgm_typ_cd as govt_pgm_typ_cd,
+                h_cntrct_id as h_cntrct_id,
+                cos_div_cd as cos_div_cd,
+                cos_grp_nbr as cos_grp_nbr,
+                lgcy_src_id as lgcy_src_id,
+                src_cd as src_cd,
+                cov_eff_dt as cov_eff_dt,
+                cov_canc_dt as cov_canc_dt,
+                pbp_cd as pbp_cd,
+                current_updt_ts as current_updt_ts,
+                src_tmstmp as src_tmstmp;
+
+-- 2016/12/13 - cov_canc_dt can be null for good record
+L_COV_PRDT_DT_D = FILTER L_COV_PRDT_DT_E BY cov_eff_dt >= '$START_COV_EFF_DT' AND cov_canc_dt >= '$GE_COV_CANC_DT';
+L_COV_PRDT_DT  = DISTINCT L_COV_PRDT_DT_D;
+
+L_COV_PRDT_PCP_O        = LOAD '$DBNAME.f6435dbp_l_cov_prdt_pcp_snapshot' USING org.apache.hive.hcatalog.pig.HCatLoader();
+L_COV_PRDT_PCP_E = FOREACH L_COV_PRDT_PCP_O GENERATE
+                 src_cdb_xref_id as src_cdb_xref_id,
+                 prov_id as prov_id,
+                 pcp_eff_dt as pcp_eff_dt,
+                 pcp_canc_dt as pcp_canc_dt,
+                 current_updt_ts as current_updt_ts,
+                 src_tmstmp as src_tmstmp;
+
+-- 2016/12/13 - pcp_canc_dt can be null for good record
+-- L_COV_PRDT_PCP_D = FILTER L_COV_PRDT_PCP_E BY pcp_eff_dt >= '$START_COV_EFF_DT' AND pcp_canc_dt >= '$GE_COV_CANC_DT';
+L_COV_PRDT_PCP_D = FILTER L_COV_PRDT_PCP_E BY pcp_canc_dt >= '$GE_COV_CANC_DT' OR TRIM(pcp_canc_dt) == '';
+L_COV_PRDT_PCP   = DISTINCT L_COV_PRDT_PCP_D;
+
+ML_CNSM_ADR_O   = LOAD '$DBNAME.f6435dbp_ml_cnsm_adr_snapshot' USING org.apache.hive.hcatalog.pig.HCatLoader();
+ML_CNSM_ADR  = FOREACH ML_CNSM_ADR_O GENERATE
+                src_cdb_xref_id as src_cdb_xref_id,
+                pst_adr_typ_cd as pst_adr_typ_cd,
+                str_adr_ln_1_txt as str_adr_ln_1_txt,
+                str_adr_ln_2_txt as str_adr_ln_2_txt,
+                cty_nm as cty_nm,
+                st_cd as st_cd,
+                pst_cd as pst_cd,
+                pst_ext_cd as pst_ext_cd,
+                current_updt_ts as current_updt_ts,
+                src_tmstmp as src_tmstmp;
+
+ML_CNSM_ELCTR_ADR_O = LOAD '$DBNAME.f6435dbp_ml_cnsm_elctr_adr_snapshot' USING org.apache.hive.hcatalog.pig.HCatLoader();
+ML_CNSM_ELCTR_ADR = FOREACH ML_CNSM_ELCTR_ADR_O GENERATE
+                    lgcy_src_id as lgcy_src_id,
+                    src_cd as src_cd,
+                    elctr_adr_txt as elctr_adr_txt,
+                    current_updt_ts as current_updt_ts,
+                    src_tmstmp as src_tmstmp;
+
+ML_CNSM_TEL_O   = LOAD '$DBNAME.f6435dbp_ml_cnsm_tel_snapshot' USING org.apache.hive.hcatalog.pig.HCatLoader();
+ML_CNSM_TEL     = FOREACH ML_CNSM_TEL_O GENERATE
+                  src_cdb_xref_id as src_cdb_xref_id,
+                  tel_typ_cd as tel_typ_cd,
+                  tel_nbr as tel_nbr,
+                  current_updt_ts as current_updt_ts,
+                  src_tmstmp as src_tmstmp;
+
+ML_CNSM_XREF_O  = LOAD '$DBNAME.f6435dbp_ml_cnsm_xref_snapshot' USING org.apache.hive.hcatalog.pig.HCatLoader();
+ML_CNSM_XREF_E    = FOREACH ML_CNSM_XREF_O GENERATE
+                  src_cdb_xref_id as src_cdb_xref_id,
+                  lgcy_src_id as lgcy_src_id,
+                  src_cd as src_cd,
+                  alt_id_typ_cd as alt_id_typ_cd,
+                  alt_cnsm_id as alt_cnsm_id,
+                  current_updt_ts as current_updt_ts,
+                  src_tmstmp as src_tmstmp;
+
+ML_CNSM_XREF_D = FILTER ML_CNSM_XREF_E BY alt_id_typ_cd in ('HIC', 'MRN');
+ML_CNSM_XREF   = DISTINCT ML_CNSM_XREF_D;
+
+GOVT_PGM_TYP_O    = LOAD '$DBNAME.f6435dbp_govt_pgm_typ_snapshot' USING org.apache.hive.hcatalog.pig.HCatLoader();
+GOVT_PGM_TYP      = FOREACH GOVT_PGM_TYP_O GENERATE
+                    govt_pgm_typ_cd as govt_pgm_typ_cd,
+                    govt_pgm_typ_txt as govt_pgm_typ_txt;
+
+CNSM_STS_O = LOAD '$DBNAME.f6435dbp_cnsm_sts_snapshot' USING org.apache.hive.hcatalog.pig.HCatLoader();
+CNSM_STS_D      = FOREACH CNSM_STS_O GENERATE
+                  src_cdb_xref_id as src_cdb_xref_id,
+                  cnsm_sts_typ_cd as cnsm_sts_typ_cd,
+                  cnsm_sts_eff_dt as cnsm_sts_eff_dt,
+                  src_tmstmp as src_tmstmp,
+                  current_updt_ts as current_updt_ts;
+
+CNSM_STS_F = FILTER CNSM_STS_D BY cnsm_sts_typ_cd == 'D';
+
+CNSM_STS = DISTINCT CNSM_STS_F;
+
+/*
+-- Macro will get record count for each table and store into HBase for each table.
+DEFINE GETnSTORE_TABLE_RC( TABLE, KEY, TRACKINGID) RETURNS void  {
+              --  TABLE_GRP = GROUP $TABLE BY $KEY;
+                TABLE_GRP = GROUP $TABLE ALL;
+                TABLE_COUNT = FOREACH TABLE_GRP GENERATE COUNT_STAR($TABLE);
+                TABLE_COUNT_GRP = GROUP TABLE_COUNT ALL;
+
+                UPDATE_TABLE_COUNT = FOREACH TABLE_COUNT_GRP GENERATE '$TRACKINGID',FLATTEN(TABLE_COUNT);
+                --DUMP UPDATE_TABLE_COUNT;
+
+                -- Store record count into HBase from Pig
+                STORE UPDATE_TABLE_COUNT INTO '$HBaseTable'
+                                         USING org.apache.pig.backend.hadoop.hbase.HBaseStorage('$HBaseColFamily:$TABLE');
+
+}
+
+-- For each table store Record count into HBase
+
+GETnSTORE_TABLE_RC(GOVT_PGM_TYP, govt_pgm_typ_cd, '$CCM_TrackingId');
+GETnSTORE_TABLE_RC(CNSM_LANG_PREF, cnsm_id, '$CCM_TrackingId');
+GETnSTORE_TABLE_RC(L_CNSM_SRCH, src_cdb_xref_id, '$CCM_TrackingId');
+GETnSTORE_TABLE_RC(L_COV_PRDT_DT, src_cdb_xref_id, '$CCM_TrackingId');
+GETnSTORE_TABLE_RC(L_COV_PRDT_PCP, src_cdb_xref_id, '$CCM_TrackingId');
+GETnSTORE_TABLE_RC(ML_CNSM_ADR, src_cdb_xref_id, '$CCM_TrackingId');
+GETnSTORE_TABLE_RC(ML_CNSM_ELCTR_ADR, cnsm_id, '$CCM_TrackingId');
+GETnSTORE_TABLE_RC(ML_CNSM_TEL, src_cdb_xref_id, '$CCM_TrackingId');
+GETnSTORE_TABLE_RC(ML_CNSM_XREF, src_cdb_xref_id, '$CCM_TrackingId');
+GETnSTORE_TABLE_RC(LANG_PREF_TYP, lang_typ_cd, '$CCM_TrackingId');
+*/
+
+-- Left outer Join L_CNSM_SRCH with LANG_TYP_TXT_J refrence table - and store in relation IT1 to get Language preferance
+IT1 = JOIN L_CNSM_SRCH BY cnsm_id LEFT OUTER, LANG_TYP_TXT_J BY CNSM_LANG_PREF::cnsm_id using 'replicated' PARALLEL $PARALLELISM;
+
+-- Join L_COV_PRDT_DT with GOVT_PGM_TYP reference table - and store in relation IT2 to get coverage details
+IT2 = JOIN L_COV_PRDT_DT BY govt_pgm_typ_cd LEFT OUTER, GOVT_PGM_TYP BY govt_pgm_typ_cd USING 'replicated' PARALLEL $PARALLELISM;
+
+-- Join both IT1 and IT3 relations with referenced data in IT3
+IT3 = JOIN IT1 BY L_CNSM_SRCH::src_cdb_xref_id , -- LEFT OUTER,
+      IT2 BY L_COV_PRDT_DT::src_cdb_xref_id PARALLEL $PARALLELISM;
+
+-- Pivot 'HIC' and 'MRN' Values from ML_CNSM_XREF Table to get HICN and MEDICAID_ID in common format
+ML_CNSM_XREF_HIC = FILTER ML_CNSM_XREF BY alt_id_typ_cd == 'HIC';
+ML_CNSM_XREF_MRN = FILTER ML_CNSM_XREF BY alt_id_typ_cd == 'MRN';
+
+
+-- Join data and get required columns after join - and store in relation IT4_1
+IT4_1 = JOIN L_CNSM_SRCH BY src_cdb_xref_id LEFT OUTER ,
+            ML_CNSM_XREF_HIC BY src_cdb_xref_id PARALLEL $PARALLELISM;
+
+IT4_2 = JOIN IT4_1 BY L_CNSM_SRCH::src_cdb_xref_id LEFT OUTER, -- and store in IT4_2
+            ML_CNSM_XREF_MRN BY src_cdb_xref_id PARALLEL $PARALLELISM;
+
+-- Join above relation with ML_CNSM_ELCTR_ADR - store in IT4 to get email details
+IT4 = JOIN IT4_2 BY CONCAT(L_CNSM_SRCH::lgcy_src_id,L_CNSM_SRCH::src_cd) LEFT OUTER,
+            ML_CNSM_ELCTR_ADR  BY CONCAT(lgcy_src_id,src_cd) using 'replicated' PARALLEL $PARALLELISM;
+
+-- Extract required fields from pivot - store in IT4_FINAL. Not in common format yet.
+IT4_FINAL = FOREACH IT4 GENERATE
+        --  XREF_ID
+        IT4_2::IT4_1::L_CNSM_SRCH::src_cdb_xref_id                              AS SRC_CDB_XREF_ID,
+        --      Health Insurance Claim ID (HICN)
+        CASE
+                WHEN IT4_2::IT4_1::ML_CNSM_XREF_HIC::alt_id_typ_cd == 'HIC'
+                THEN IT4_2::IT4_1::ML_CNSM_XREF_HIC::alt_cnsm_id
+                ELSE NULL
+        END                                                                     AS HICN,
+        --  Medicaid ID
+        CASE
+                WHEN IT4_2::ML_CNSM_XREF_MRN::alt_id_typ_cd == 'MRN'
+                THEN IT4_2::ML_CNSM_XREF_MRN::alt_cnsm_id
+                ELSE NULL
+        END                                                                     AS MEDICAID_ID,
+        --  e-Mail
+        ML_CNSM_ELCTR_ADR::elctr_adr_txt                                        AS EMAIL_ADDRESS,
+        udf.maxdate(TOTUPLE(IT4_2::IT4_1::L_CNSM_SRCH::current_updt_ts,IT4_2::IT4_1::ML_CNSM_XREF_HIC::current_updt_ts,IT4_2::ML_CNSM_XREF_MRN::current_updt_ts,ML_CNSM_ELCTR_ADR::current_updt_ts)) AS (CURRENT_UPDT_TS:chararray),
+        udf.maxdate(TOTUPLE(IT4_2::IT4_1::L_CNSM_SRCH::src_tmstmp,IT4_2::IT4_1::ML_CNSM_XREF_HIC::src_tmstmp,IT4_2::ML_CNSM_XREF_MRN::src_tmstmp,ML_CNSM_ELCTR_ADR::src_tmstmp)) AS (SRC_TMSTMP:chararray);
+
+
+--Pivot the ML_CNSM_TEL relation to get the primary phone and secondary phone details
+--Pivot the ML_CNSM_ADR relation to get the primary and secondary address details
+
+-- Join L_CNSM_SRCH with ML_CNSM_TEL_P - store in PH_P
+ML_CNSM_TEL_P = FILTER ML_CNSM_TEL by TRIM(tel_typ_cd) == 'P';
+PH_P = JOIN L_CNSM_SRCH BY src_cdb_xref_id LEFT OUTER,
+           ML_CNSM_TEL_P BY src_cdb_xref_id  using 'replicated' PARALLEL $PARALLELISM;
+
+--  Join above relation with ML_CNSM_TEL_C - store in PH_C (Phone of type "C")
+ML_CNSM_TEL_C = FILTER ML_CNSM_TEL by TRIM(tel_typ_cd) == 'C';
+PH_C = JOIN PH_P BY L_CNSM_SRCH::src_cdb_xref_id LEFT OUTER,
+           ML_CNSM_TEL_C BY src_cdb_xref_id  using 'replicated' PARALLEL $PARALLELISM;
+
+-- Join above relation with ML_CNSM_TEL_A - store in ML_CNSM_TEL_A (Phone of type "A")
+ML_CNSM_TEL_A = FILTER ML_CNSM_TEL by TRIM(tel_typ_cd) == 'A';
+PH_A = JOIN PH_C BY PH_P::L_CNSM_SRCH::src_cdb_xref_id LEFT OUTER,
+           ML_CNSM_TEL_A BY src_cdb_xref_id  using 'replicated' PARALLEL $PARALLELISM;
+
+-- Join above relation with ML_CNSM_ADR_P - store in ML_CNSM_ADR_P (Address type "P")
+ML_CNSM_ADR_P = FILTER ML_CNSM_ADR by TRIM(pst_adr_typ_cd) == 'P';
+ADR_P = JOIN L_CNSM_SRCH BY src_cdb_xref_id LEFT OUTER,
+           ML_CNSM_ADR_P BY src_cdb_xref_id  using 'replicated' PARALLEL $PARALLELISM;
+
+-- Join above relation with ML_CNSM_ADR_M - store in ML_CNSM_ADR_M (Address type "A")
+ML_CNSM_ADR_M = FILTER ML_CNSM_ADR by TRIM(pst_adr_typ_cd) == 'M';
+ADR_M = JOIN ADR_P BY L_CNSM_SRCH::src_cdb_xref_id LEFT OUTER,
+         ML_CNSM_ADR_M BY src_cdb_xref_id  using 'replicated' PARALLEL $PARALLELISM;
+
+-- Join above relation with ADR_M - store in IT5 (IT5 is the pivot with Tel and Addr details)
+IT5 = JOIN PH_A BY PH_C::PH_P::L_CNSM_SRCH::src_cdb_xref_id LEFT OUTER,
+           ADR_M BY ADR_P::L_CNSM_SRCH::src_cdb_xref_id using 'replicated' PARALLEL $PARALLELISM;
+
+-- Extract required fields from above pivot required in common format
+IT5_FINAL = FOREACH IT5 GENERATE
+        -- SRC_CDB_XREF_ID
+        PH_A::PH_C::PH_P::L_CNSM_SRCH::src_cdb_xref_id  AS SRC_CDB_XREF_ID,
+        -- Phone Type
+        -- From mapping Doc - If TEL_TYP_CD = 'P'  or TEL_TYP_CD ='C'  then Direct Move Else set to NULL
+        CASE
+                WHEN ((PH_A::PH_C::PH_P::ML_CNSM_TEL_P::tel_typ_cd is NULL) AND (PH_A::PH_C::ML_CNSM_TEL_C::tel_typ_cd is not NULL))
+                THEN 'Cell Phone' --PH_A::PH_C::ML_CNSM_TEL_C::tel_typ_cd
+                WHEN TRIM(PH_A::PH_C::PH_P::ML_CNSM_TEL_P::tel_typ_cd) == 'P'
+                THEN 'Primary'
+                --WHEN PH_A::PH_C::PH_P::ML_CNSM_TEL_P::tel_typ_cd is NULL --AND PH_A::PH_C::ML_CNSM_TEL_C::tel_typ_cd is NULL
+                --THEN NULL
+        END AS (PRIMARY_PHN_TYP:chararray),
+        -- From mapping Doc - If TEL_TYP_CD = 'P'  or TEL_TYP_CD ='C' then populate the TEL_NBR Else set to NULL
+        CASE
+                WHEN PH_A::PH_C::PH_P::ML_CNSM_TEL_P::tel_typ_cd is NULL
+                THEN PH_A::PH_C::ML_CNSM_TEL_C::tel_nbr
+                WHEN TRIM(PH_A::PH_C::PH_P::ML_CNSM_TEL_P::tel_typ_cd) == 'P'
+                THEN PH_A::PH_C::PH_P::ML_CNSM_TEL_P::tel_nbr
+        END AS PRIMARY_PHN_NBR,
+        -- From mapping Doc - If TEL_TYP_CD = 'A'   then Direct Move Else set to NULL
+        CASE
+                WHEN PH_A::ML_CNSM_TEL_A::tel_typ_cd is NULL
+                THEN PH_A::ML_CNSM_TEL_A::tel_typ_cd
+                WHEN PH_A::ML_CNSM_TEL_A::tel_typ_cd == 'A'
+                THEN 'Alternate'
+        END AS OTHR_PHN_TYP,
+        -- From mapping Doc - If TEL_TYP_CD = 'A' then populate the TEL_NBR Else set to NULL
+          PH_A::ML_CNSM_TEL_A::tel_nbr AS OTHR_PHN_NBR,
+         -- From mapping Doc - If 'P', Set to 'Permanent'
+          CASE
+                WHEN ADR_M::ADR_P::ML_CNSM_ADR_P::pst_adr_typ_cd is not NULL
+                THEN 'Permanent'
+          END AS ADDR_TYPE_CODE,
+          -- From mapping Doc - IF PST_ADR_TYP_CD ='P' then Direct Move, Else Set to 'NULL'
+          UPPER(ADR_M::ADR_P::ML_CNSM_ADR_P::str_adr_ln_1_txt) AS ADDRESS_LINE_1,
+          UPPER(ADR_M::ADR_P::ML_CNSM_ADR_P::str_adr_ln_2_txt) AS ADDRESS_LINE_2,
+          UPPER(ADR_M::ADR_P::ML_CNSM_ADR_P::cty_nm) AS CITY,
+          UPPER(ADR_M::ADR_P::ML_CNSM_ADR_P::st_cd) AS STATE_CD,
+          ADR_M::ADR_P::ML_CNSM_ADR_P::pst_cd AS ZIP,
+          ADR_M::ADR_P::ML_CNSM_ADR_P::pst_ext_cd AS ZIP_PLS_4,
+          -- From mapping Doc - If 'M', Set to 'Mailing'
+          CASE
+                WHEN ADR_M::ML_CNSM_ADR_M::pst_adr_typ_cd is not NULL
+                THEN 'Mailing'
+          END AS MAILING_ADDR_TYPE_CODE,
+          -- From mapping Doc - IF PST_ADR_TYP_CD ='M' then Direct Move, Else Set to 'NULL'
+          UPPER(ADR_M::ML_CNSM_ADR_M::str_adr_ln_1_txt) AS MAILING_ADDRESS_LINE_1,
+          UPPER(ADR_M::ML_CNSM_ADR_M::str_adr_ln_2_txt) AS MAILING_ADDRESS_LINE_2,
+          UPPER(ADR_M::ML_CNSM_ADR_M::cty_nm) AS MAILING_CITY,
+          UPPER(ADR_M::ML_CNSM_ADR_M::st_cd) AS MAILING_STATE_CD,
+          ADR_M::ML_CNSM_ADR_M::pst_cd AS MAILING_ZIP,
+          ADR_M::ML_CNSM_ADR_M::pst_ext_cd AS MAILING_ZIP_PLS_4,
+          udf.maxdate(TOTUPLE(PH_A::PH_C::PH_P::L_CNSM_SRCH::current_updt_ts, PH_A::PH_C::PH_P::ML_CNSM_TEL_P::current_updt_ts, PH_A::PH_C::ML_CNSM_TEL_C::current_updt_ts, PH_A::ML_CNSM_TEL_A::current_updt_ts, ADR_M::ADR_P::L_CNSM_SRCH::current_updt_ts, ADR_M::ADR_P::ML_CNSM_ADR_P::current_updt_ts, ADR_M::ML_CNSM_ADR_M::current_updt_ts)) AS (CURRENT_UPDT_TS:chararray),
+          udf.maxdate(TOTUPLE(PH_A::PH_C::PH_P::L_CNSM_SRCH::src_tmstmp, PH_A::PH_C::PH_P::ML_CNSM_TEL_P::src_tmstmp, PH_A::PH_C::ML_CNSM_TEL_C::src_tmstmp, PH_A::ML_CNSM_TEL_A::src_tmstmp, ADR_M::ADR_P::L_CNSM_SRCH::src_tmstmp, ADR_M::ADR_P::ML_CNSM_ADR_P::src_tmstmp, ADR_M::ML_CNSM_ADR_M::src_tmstmp)) AS (SRC_TMSTMP:chararray);
+
+-- JOIN IT3 (Lang preferance and coverage details) with IT4_FINAL (HICN, Medicad Id and email details)- store in IT6_1
+IT6_1 = JOIN IT3 BY IT1::L_CNSM_SRCH::src_cdb_xref_id, --LEFT OUTER,
+           IT4_FINAL BY SRC_CDB_XREF_ID using 'skewed' PARALLEL $PARALLELISM; --  using 'replicated' PARALLEL $PARALLELISM;
+
+-- Join above relation with IT5_FINAL (Phone and Adress details) - store in IT6
+IT6 = JOIN IT6_1 BY IT3::IT1::L_CNSM_SRCH::src_cdb_xref_id, --LEFT OUTER,
+           IT5_FINAL BY SRC_CDB_XREF_ID using 'skewed' PARALLEL $PARALLELISM; --  using 'replicated' PARALLEL $PARALLELISM;
+
+-- Join above relation with L_COV_PRDT_PCP - store in IT7
+IT7 = JOIN IT6 BY IT6_1::IT3::IT1::L_CNSM_SRCH::src_cdb_xref_id LEFT OUTER,
+           L_COV_PRDT_PCP BY src_cdb_xref_id  PARALLEL $PARALLELISM;
+
+--IT8 = JOIN CNSM_STS BY src_cdb_xref_id RIGHT OUTER, IT7 BY IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::src_cdb_xref_id PARALLEL $PARALLELISM;
+IT8 = JOIN IT7 BY IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::src_cdb_xref_id LEFT OUTER,
+         CNSM_STS BY src_cdb_xref_id using 'replicated' PARALLEL $PARALLELISM;
+
+-- Apply filter to get the active pcp details -- Commented after Demo
+--IT7_FILTERED = FILTER IT7 BY IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::cov_eff_dt >= L_COV_PRDT_PCP::pcp_eff_dt;
+
+-- Extract required fields in Common format from IT7_FILTERED - store in RAW_FINAL
+--RAW_FINAL = FOREACH IT7_FILTERED GENERATE
+RAW_FINAL = FOREACH IT8 GENERATE
+        --  Name of the Source
+        'CDB-MEMBER ELIGIBILITY'                                                        AS SOURCE_NAME,
+        --  Primary key for root source table
+        IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::src_cdb_xref_id                         AS SOURCE_PRIMARY_KEY,
+        --  Client Health Plan Membership ID
+        --CONCAT(TRIM(IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::cos_div_cd), TRIM(IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::cos_grp_nbr)) AS CLNT_HTLH_PLN_MBRSHP_ID ,
+        --CONCAT(TRIM(IT7::IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::cos_div_cd), TRIM(UPPER(SUBSTRING(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::lgcy_src_id,3,8)))) AS CLNT_HTLH_PLN_MBRSHP_ID ,
+        TRIM(UPPER(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::lgcy_alt_mbr_id))                    AS CLNT_HLTH_PLN_MBRSHP_ID ,
+        --  I Membership ID (IMDM)
+        IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::cnsm_id                                 AS I_MDM,
+        -- HICN
+        TRIM(IT7::IT6::IT6_1::IT4_FINAL::HICN)                                          AS  HICN,
+        -- MEDICAID_ID
+        TRIM(IT7::IT6::IT6_1::IT4_FINAL::MEDICAID_ID)                                   AS MEDICAID_ID,
+        -- CMS Medicare Beneficiary Identifier (MBI)
+        NULL                                                                            AS CMS_MBI,
+        --  Client Health Plan Code
+        TRIM(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::lgcy_src_id)                       AS CLNT_HLTH_PLN_CD,
+        --  First Name
+        TRIM(UPPER(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::fst_nm))                     AS FIRST_NAME,
+        --  Last Name
+        TRIM(UPPER(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::lst_nm))                     AS LAST_NAME,
+        --  Middle Initial
+        TRIM(UPPER(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::midl_init_txt))              AS MIDDLE_INITIAL,
+        --  Middle Name
+        NULL                                                                            AS MIDDLE_NAME,
+        --  Gender
+        CASE
+        WHEN  IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::gdr_typ_cd == 'M'
+                THEN 'Male'
+        WHEN  IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::gdr_typ_cd == 'F'
+                THEN 'Female'
+        ELSE 'Unknown'
+        END                                                                             AS GENDER,
+        --IT6_1::IT3::IT2::IT1::IT1_1::L_CNSM_SRCH::gdr_typ_cd                          AS GENDER,
+        --  Date of Birth
+        TRIM(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::bth_dt)                            AS DATE_OF_BIRTH,
+        --  Date of Death
+        CASE
+        WHEN CNSM_STS::cnsm_sts_typ_cd == 'D'
+             THEN CNSM_STS::cnsm_sts_eff_dt
+        END AS DATE_OF_DEATH,
+        -- PHN_TYPE
+        IT7::IT6::IT5_FINAL::PRIMARY_PHN_TYP                                            AS PHN_TYPE,
+        -- PRIMARY_PHONE_NUMBER
+        TRIM(IT7::IT6::IT5_FINAL::PRIMARY_PHN_NBR)                                      AS PRIMARY_PHONE_NUMBER,
+        -- OTHR_PHN_TYPE
+        IT7::IT6::IT5_FINAL::OTHR_PHN_TYP                                               AS OTHR_PHN_TYPE,
+        -- SECONDARY_PHONE_NUMBER
+        TRIM(IT7::IT6::IT5_FINAL::OTHR_PHN_NBR)                                         AS SECONDARY_PHONE_NUMBER,
+        -- EMAIL_ADDRESS
+        TRIM(IT7::IT6::IT6_1::IT4_FINAL::EMAIL_ADDRESS)                                 AS EMAIL_ADDRESS,
+        -- ADDR_TYPE_CODE
+        IT7::IT6::IT5_FINAL::ADDR_TYPE_CODE                                             AS ADDR_TYPE_CODE,
+        -- ADDRESS_LINE_1
+        TRIM(IT7::IT6::IT5_FINAL::ADDRESS_LINE_1)                                       AS ADDRESS_LINE_1,
+        -- ADDRESS_LINE_2
+        TRIM(IT7::IT6::IT5_FINAL::ADDRESS_LINE_2)                                       AS ADDRESS_LINE_2,
+        -- CITY
+        TRIM(IT7::IT6::IT5_FINAL::CITY)                                                 AS CITY,
+        -- STATE_CD
+        TRIM(IT7::IT6::IT5_FINAL::STATE_CD)                                             AS STATE_CD,
+        -- COUNTY_NAME
+        NULL                                                                            AS COUNTY_NAME,
+        -- ZIP
+        TRIM(IT7::IT6::IT5_FINAL::ZIP)                                                  AS ZIP,
+        -- ZIP_PLS_4
+        TRIM(IT7::IT6::IT5_FINAL::ZIP_PLS_4)                                            AS ZIP_PLS_4,
+        -- ADDR_TYPE_CODE
+        IT7::IT6::IT5_FINAL::MAILING_ADDR_TYPE_CODE                                     AS MAILING_ADDR_TYPE_CODE,
+        -- ADDRESS_LINE_1
+        TRIM(IT7::IT6::IT5_FINAL::MAILING_ADDRESS_LINE_1)                               AS MAILING_ADDRESS_LINE_1,
+        -- ADDRESS_LINE_2
+        TRIM(IT7::IT6::IT5_FINAL::MAILING_ADDRESS_LINE_2)                               AS MAILING_ADDRESS_LINE_2,
+        -- CITY
+        TRIM(IT7::IT6::IT5_FINAL::MAILING_CITY)                                         AS MAILING_CITY,
+        -- STATE_CD
+        TRIM(IT7::IT6::IT5_FINAL::MAILING_STATE_CD)                                     AS MAILING_STATE_CD,
+         -- MAILING_COUNTY_NAME
+        NULL                                                                            AS MAILING_COUNTY_NAME,
+        -- ZIP
+        TRIM(IT7::IT6::IT5_FINAL::MAILING_ZIP)                                          AS MAILING_ZIP,
+        -- ZIP_PLS_4
+        TRIM(IT7::IT6::IT5_FINAL::MAILING_ZIP_PLS_4)                                    AS MAILING_ZIP_PLS_4,
+        -- Membership Effective Date
+        NULL                                                                            AS MBRSHP_EFF_DT,
+        -- Membership Discontinued Date
+        NULL                                                                            AS MBRSHIP_TERM_DT,
+        -- Health Plan Update Date
+        NULL                                                                            AS HLTH_PLN_UPDT_DT,
+        -- Member Primary Care Physician ID (PCP)
+        IT7::L_COV_PRDT_PCP::prov_id                                                    AS PCP_PROV_ID,
+        -- PCP Site Code
+        CASE
+                WHEN IT7::L_COV_PRDT_PCP::prov_id is not NULL
+                THEN IT7::IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::cos_div_cd
+        END                                                                             AS PCP_SITE_CD,
+        --  PCP Start Date
+        TRIM(IT7::L_COV_PRDT_PCP::pcp_eff_dt)                                           AS PCP_STRT_DT,
+        --  PCP End Date
+        TRIM(IT7::L_COV_PRDT_PCP::pcp_canc_dt)                                          AS PCP_END_DT,
+        --  Member Skilled Nursing Facility ID
+        NULL                                                                            AS MBR_SNF_ID,
+        --  Plan Type
+        TRIM(IT7::IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::govt_pgm_typ_cd)                 AS PLN_TYPE,
+        -- PLAN_DESC
+        TRIM(UPPER(IT7::IT6::IT6_1::IT3::IT2::GOVT_PGM_TYP::govt_pgm_typ_txt))          AS PLAN_DESC,
+        --  Client Health Plan Division
+        TRIM(UPPER(IT7::IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::cos_div_cd))               AS CLNT_HLTH_PLN_DIV,
+        --  Client Health Plan Group Number
+        --UPPER(IT7::IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::cos_grp_nbr)                  AS CLNT_HLTH_PLN_GRP_NBR,
+        UPPER(SUBSTRING(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::lgcy_src_id,3,8))       AS CLNT_HLTH_PLN_GRP_NBR,
+        -- Client Health Plan Contract Number
+--      TRIM(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::dept_nbr)                          AS CONTRACT_NUMBER,
+  TRIM(IT7::IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::h_cntrct_id)                           AS CONTRACT_NUMBER,
+        -- Do not call indicator
+        NULL                                                                            AS DO_NOT_CALL,
+        -- Do not mail indiacator
+        NULL                                                                            AS DO_NOT_MAIL,
+        -- CLNT_HLTH_PLAN_ST
+        NULL                                                                            AS CLNT_HLTH_PLAN_ST,
+        --  Risk Stratification Level
+        NULL                                                                            AS RISK_STRATIFICATION_LVL,
+        --  Membership System ID
+        UPPER(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::src_cd)                           AS MBRSHP_SYS_ID,
+        --  Address Begin Date
+        NULL                                                                            AS ADR_BEGIN_DT,
+        --  Address End Date
+        NULL                                                                            AS ADR_END_DT,
+        -- LANGUAGE_PREFERENCE_NAME
+        UPPER(IT7::IT6::IT6_1::IT3::IT1::LANG_TYP_TXT_J::LANG_PREF_TYP::lang_typ_txt)   AS LANGUAGE_PREFERENCE_NAME,
+        -- Plan Benefit Package
+        CASE
+        WHEN IT7::IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::pbp_cd is NULL
+                THEN 'Unknown'
+        ELSE UPPER(SUBSTRING(IT7::IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::pbp_cd, 1, 4))
+        END                                                                             AS PBP,
+        --  Insured Plan Effective  Date
+        TRIM(IT7::IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::cov_eff_dt)                      AS INSURED_PLAN_EFFECTIVE_DATE,
+        --  Insured Plan End Date
+        TRIM(IT7::IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::cov_canc_dt)                     AS INSURED_PLAN_TERMINATION_DATE,
+        -- src_load_date
+        udf.maxdate(TOTUPLE(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::current_updt_ts,IT7::IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::current_updt_ts, IT7::IT6::IT6_1::IT4_FINAL::CURRENT_UPDT_TS, IT7::IT6::IT5_FINAL::CURRENT_UPDT_TS, IT7::L_COV_PRDT_PCP::current_updt_ts, CNSM_STS::current_updt_ts)) AS (SRC_LOAD_DATE:chararray),
+        udf.maxdate(TOTUPLE(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::src_tmstmp, IT7::IT6::IT6_1::IT3::IT2::L_COV_PRDT_DT::src_tmstmp, IT7::IT6::IT6_1::IT4_FINAL::SRC_TMSTMP, IT7::IT6::IT5_FINAL::SRC_TMSTMP, IT7::L_COV_PRDT_PCP::src_tmstmp, CNSM_STS::src_tmstmp)) AS (SRC_UPDATE_DATE:chararray),
+
+        -- ROW_STATUS_CODE
+        TRIM(IT7::IT6::IT6_1::IT3::IT1::L_CNSM_SRCH::row_sts_cd)                                AS ROW_STATUS_CODE,
+        -- df_watermarkid
+        '$CCM_TrackingId'                                                               AS DF_WATERMARKID;
+
+
+-- Filter based on CURRENT_UPDT_TS to get the delta - store in RAW_FINAL_FILTERED
+-- RAW_FINAL_FILTERED = FILTER RAW_FINAL by SRC_LOAD_DATE > '$LASTRUN_TS';
+RAW_FINAL_FILTERED = FILTER RAW_FINAL by SUBSTRING(SRC_LOAD_DATE,0,19) > '$LASTRUN_TS';
+
+-- Remove Duplicates if any - store in RAW_DISTINCT
+RAW_DISTINCT = DISTINCT RAW_FINAL_FILTERED;
+
+-- Group by all required columns
+RAW_GRP = GROUP RAW_DISTINCT BY (SOURCE_NAME ,SOURCE_PRIMARY_KEY,CLNT_HLTH_PLN_MBRSHP_ID,I_MDM ,HICN ,MEDICAID_ID ,CMS_MBI ,CLNT_HLTH_PLN_CD ,FIRST_NAME ,LAST_NAME ,MIDDLE_INITIAL ,MIDDLE_NAME ,GENDER ,DATE_OF_BIRTH ,DATE_OF_DEATH ,PHN_TYPE ,PRIMARY_PHONE_NUMBER ,OTHR_PHN_TYPE ,SECONDARY_PHONE_NUMBER ,EMAIL_ADDRESS ,ADDR_TYPE_CODE ,ADDRESS_LINE_1 ,ADDRESS_LINE_2 ,CITY ,STATE_CD ,COUNTY_NAME ,ZIP ,ZIP_PLS_4 ,MAILING_ADDR_TYPE_CODE ,MAILING_ADDRESS_LINE_1 ,MAILING_ADDRESS_LINE_2 ,MAILING_CITY ,MAILING_STATE_CD ,MAILING_COUNTY_NAME ,MAILING_ZIP ,MAILING_ZIP_PLS_4 ,MBRSHP_EFF_DT ,MBRSHIP_TERM_DT ,HLTH_PLN_UPDT_DT ,PCP_PROV_ID ,PCP_SITE_CD ,PCP_STRT_DT ,PCP_END_DT ,MBR_SNF_ID ,PLN_TYPE ,PLAN_DESC ,CLNT_HLTH_PLN_DIV ,CLNT_HLTH_PLN_GRP_NBR ,CONTRACT_NUMBER ,DO_NOT_CALL ,DO_NOT_MAIL ,CLNT_HLTH_PLAN_ST ,RISK_STRATIFICATION_LVL ,MBRSHP_SYS_ID ,ADR_BEGIN_DT ,ADR_END_DT ,LANGUAGE_PREFERENCE_NAME ,PBP ,INSURED_PLAN_EFFECTIVE_DATE ,INSURED_PLAN_TERMINATION_DATE ,ROW_STATUS_CODE, DF_WATERMARKID);
+
+-- Flatten columns and  date columns
+RAW_FN = FOREACH RAW_GRP GENERATE
+FLATTEN(group), FLATTEN(udf.maxdate(RAW_DISTINCT.SRC_LOAD_DATE)) as SRC_LOAD_DATE, FLATTEN(udf.maxdate(RAW_DISTINCT.SRC_UPDATE_DATE)) as SRC_UPDATE_DATE;
+
+-- GET All columns and date fields in correct format
+RAW_FN_STORE = FOREACH RAW_FN GENERATE
+group::SOURCE_NAME ,group::SOURCE_PRIMARY_KEY ,group::CLNT_HLTH_PLN_MBRSHP_ID ,group::I_MDM ,group::HICN ,group::MEDICAID_ID ,group::CMS_MBI ,group::CLNT_HLTH_PLN_CD ,group::FIRST_NAME ,group::LAST_NAME ,group::MIDDLE_INITIAL ,group::MIDDLE_NAME ,group::GENDER ,group::DATE_OF_BIRTH ,group::DATE_OF_DEATH ,group::PHN_TYPE ,group::PRIMARY_PHONE_NUMBER ,group::OTHR_PHN_TYPE ,group::SECONDARY_PHONE_NUMBER ,group::EMAIL_ADDRESS ,group::ADDR_TYPE_CODE ,group::ADDRESS_LINE_1 ,group::ADDRESS_LINE_2 ,group::CITY ,group::STATE_CD ,group::COUNTY_NAME ,group::ZIP ,group::ZIP_PLS_4 ,group::MAILING_ADDR_TYPE_CODE ,group::MAILING_ADDRESS_LINE_1 ,group::MAILING_ADDRESS_LINE_2 ,group::MAILING_CITY ,group::MAILING_STATE_CD ,group::MAILING_COUNTY_NAME ,group::MAILING_ZIP ,group::MAILING_ZIP_PLS_4 ,group::MBRSHP_EFF_DT ,group::MBRSHIP_TERM_DT ,group::HLTH_PLN_UPDT_DT ,group::PCP_PROV_ID ,group::PCP_SITE_CD ,group::PCP_STRT_DT ,group::PCP_END_DT ,group::MBR_SNF_ID ,group::PLN_TYPE ,group::PLAN_DESC ,group::CLNT_HLTH_PLN_DIV ,group::CLNT_HLTH_PLN_GRP_NBR ,group::CONTRACT_NUMBER ,group::DO_NOT_CALL ,group::DO_NOT_MAIL ,group::CLNT_HLTH_PLAN_ST ,group::RISK_STRATIFICATION_LVL ,group::MBRSHP_SYS_ID ,group::ADR_BEGIN_DT ,group::ADR_END_DT ,group::LANGUAGE_PREFERENCE_NAME ,group::PBP ,group::INSURED_PLAN_EFFECTIVE_DATE ,group::INSURED_PLAN_TERMINATION_DATE , FLATTEN(SUBSTRING(SRC_LOAD_DATE,3,22)), FLATTEN(SUBSTRING(SRC_UPDATE_DATE,3,22)), group::ROW_STATUS_CODE, group::DF_WATERMARKID;
+
+-- Get Distinct
+RAW_FN_STORE_DIST = DISTINCT RAW_FN_STORE;
+
+-- Store the Joined and Transformed data
+STORE RAW_FN_STORE_DIST INTO '$RAW_PATH' USING PigStorage ('\u0001');
+
+
+
+
+#################################DQ#############################################33
+
+SET default_parallel '$PARALLELISM';
+SET hive.metastore.uris '$METASTORE_URIS';
+SET mapreduce.job.queuename '$MR_QUEUENAME';
+--set pig.tmpfilecompression '$TMPFILECOMPRESSION';
+--set pig.tmpfilecompression.codec 'lzo';
+SET mapred.min.split.size  7584354560; --268435456;
+SET mapred.max.split.size  7584354560; --268435456;
+SET pig.noSplitCombination true;
+SET mapreduce.reduce.memory.mb 8192;
+SET mapreduce.reduce.java.opts -Xmx7168m;
+SET mapreduce.map.memory.mb 8192;
+SET mapreduce.map.java.opts -Xmx7168m;
+--set io.compression.codec.lzo.class 'com.hadoop.compression.lzo.LzoCodec';
+
+REGISTER 'ccm_udfs.py' USING streaming_python AS DQ;
+
+-- Load Hive tables in Pig using HCatalog
+CCM_RAW_O  = LOAD '$TENANT_DBNAME.ccm_cdb_raw' USING org.apache.hive.hcatalog.pig.HCatLoader();
+
+-- Filter based on the current partition
+CCM_RAW_F = FILTER CCM_RAW_O BY ccm_load_date == '$PARTITION';
+
+-- Split the good and error records
+SPLIT  CCM_RAW_F INTO CCM_DATA IF (source_primary_key is not NULL AND
+        --TRIM(source_primary_key) != '' AND
+        clnt_hlth_pln_mbrshp_id is not NULL AND
+        TRIM(clnt_hlth_pln_mbrshp_id) != '' AND
+        i_mdm is not NULL AND
+        --TRIM(i_mdm) != '' AND
+        ((boolean)DQ.validate_hicn(TRIM(hicn)) == true OR
+        TRIM(hicn) == '' OR
+        hicn is NULL) AND
+        clnt_hlth_pln_cd is not NULL AND
+        TRIM(clnt_hlth_pln_cd) != '' AND
+        first_name is not NULL AND
+        TRIM(first_name) != '' AND
+        last_name is not NULL AND
+        TRIM(last_name) != '' AND
+        date_of_birth  is not NULL AND
+        TRIM(date_of_birth) != '' AND
+        clnt_hlth_pln_div is not NULL AND
+        TRIM(clnt_hlth_pln_div) != '' AND
+        clnt_hlth_pln_grp_nbr is not NULL AND
+        mbrshp_sys_id is not NULL AND
+        TRIM(mbrshp_sys_id) != '' AND
+        pbp is not NULL AND
+        TRIM(pbp) != '' AND
+        -- pcp_strt_dt is not NULL AND
+        -- TRIM(pcp_strt_dt) != '' AND
+        -- pcp_end_dt is not NULL AND
+        -- TRIM(pcp_end_dt) != '' AND
+        insured_plan_effective_date is not NULL AND
+        TRIM(insured_plan_effective_date) != '' AND
+        insured_plan_termination_date is not NULL AND
+        TRIM(insured_plan_termination_date) != '' AND
+        (boolean)DQ.validate(date_of_birth) == true AND
+        ((boolean)DQ.validate(pcp_strt_dt) == true OR
+        TRIM(pcp_strt_dt) == '' OR
+        pcp_strt_dt is NULL) AND
+        ((boolean)DQ.validate(pcp_end_dt) == true OR
+        TRIM(pcp_end_dt) == '' OR
+        pcp_end_dt is NULL) AND
+        (boolean)DQ.validate(insured_plan_effective_date) == true AND
+        (boolean)DQ.validate(insured_plan_termination_date) == true),
+
+        CCM_ERROR IF (source_primary_key is NULL OR
+        clnt_hlth_pln_mbrshp_id is NULL OR
+        TRIM(clnt_hlth_pln_mbrshp_id) == '' OR
+        i_mdm is NULL OR
+        (boolean)DQ.validate_hicn(TRIM(hicn)) == false OR
+        clnt_hlth_pln_cd is NULL OR
+        TRIM(clnt_hlth_pln_cd) == '' OR
+        first_name is NULL OR
+        TRIM(first_name) == '' OR
+        last_name is NULL OR
+        TRIM(last_name) == '' OR
+        date_of_birth is NULL OR
+        TRIM(date_of_birth) == '' OR
+        clnt_hlth_pln_div is NULL OR
+        TRIM(clnt_hlth_pln_div) == '' OR
+        clnt_hlth_pln_grp_nbr is NULL OR
+        mbrshp_sys_id is NULL OR
+        TRIM(mbrshp_sys_id) == '' OR
+        pbp is NULL OR
+        TRIM(pbp) == '' OR
+        -- pcp_strt_dt is NULL OR
+        -- TRIM(pcp_strt_dt) == '' OR
+        -- pcp_end_dt is NULL OR
+        -- TRIM(pcp_end_dt) == '' OR
+        insured_plan_effective_date is NULL OR
+        TRIM(insured_plan_effective_date) == '' OR
+        insured_plan_termination_date is NULL OR
+        TRIM(insured_plan_termination_date) == '' OR
+        (boolean)DQ.validate(date_of_birth) == false OR
+        ((boolean)DQ.validate(pcp_strt_dt) == false AND
+        TRIM(pcp_strt_dt) != '' AND
+        pcp_strt_dt is not NULL)OR
+        ((boolean)DQ.validate(pcp_end_dt) == false AND
+        TRIM(pcp_end_dt) != '' AND
+        pcp_end_dt is not NULL) OR
+        (boolean)DQ.validate(insured_plan_effective_date) == false OR
+        (boolean)DQ.validate(insured_plan_termination_date) == false);
+
+-- Extract fields for good records
+CCM_DATA_STORE = FOREACH CCM_DATA GENERATE
+source_name ,
+source_primary_key ,
+TRIM(clnt_hlth_pln_mbrshp_id) ,
+i_mdm ,
+TRIM(hicn) ,
+TRIM(medicaid_id) ,
+cms_mbi ,
+TRIM(clnt_hlth_pln_cd) ,
+TRIM(first_name) ,
+TRIM(last_name) ,
+TRIM(middle_initial) ,
+middle_name ,
+gender ,
+TRIM(date_of_birth) ,
+date_of_death ,
+phn_type ,
+TRIM(primary_phone_number) ,
+othr_phn_type ,
+TRIM(secondary_phone_number) ,
+TRIM(email_address) ,
+addr_type_code ,
+TRIM(address_line_1) ,
+TRIM(address_line_2) ,
+TRIM(city) ,
+TRIM(state_cd) ,
+county_name ,
+TRIM(zip) ,
+TRIM(zip_pls_4) ,
+mailing_addr_type_code ,
+TRIM(mailing_address_line_1) ,
+TRIM(mailing_address_line_2) ,
+TRIM(mailing_city) ,
+TRIM(mailing_state_cd) ,
+mailing_county_name ,
+TRIM(mailing_zip) ,
+TRIM(mailing_zip_pls_4) ,
+mbrshp_eff_dt ,
+mbrship_term_dt ,
+hlth_pln_updt_dt ,
+pcp_prov_id ,
+pcp_site_cd ,
+TRIM(pcp_strt_dt) ,
+TRIM(pcp_end_dt) ,
+mbr_snf_id ,
+TRIM(pln_type) ,
+TRIM(plan_desc) ,
+TRIM(clnt_hlth_pln_div) ,
+clnt_hlth_pln_grp_nbr ,
+contract_number ,
+do_not_call ,
+do_not_mail ,
+clnt_hlth_plan_st ,
+risk_stratification_lvl ,
+mbrshp_sys_id ,
+adr_begin_dt ,
+adr_end_dt ,
+language_preference_name ,
+pbp ,
+TRIM(insured_plan_effective_date) ,
+TRIM(insured_plan_termination_date) ,
+src_load_date ,
+src_update_date ,
+TRIM(row_status_code) ,
+df_watermarkid;
+
+--Store the good record
+STORE CCM_DATA_STORE INTO '$CCM_DATA_PATH' USING PigStorage('\u0001');
+
+--Generate Unique Ids for each error records
+CCM_ERROR_R = RANK CCM_ERROR;
+
+--Extract the fields for error records
+CCM_ERROR_DESC = FOREACH CCM_ERROR_R GENERATE
+source_name ,
+source_primary_key ,
+TRIM(clnt_hlth_pln_mbrshp_id) ,
+i_mdm ,
+TRIM(hicn) ,
+TRIM(medicaid_id) ,
+cms_mbi ,
+TRIM(clnt_hlth_pln_cd) ,
+TRIM(first_name) ,
+TRIM(last_name) ,
+TRIM(middle_initial) ,
+middle_name ,
+gender ,
+TRIM(date_of_birth) ,
+date_of_death ,
+phn_type ,
+TRIM(primary_phone_number) ,
+othr_phn_type ,
+TRIM(secondary_phone_number) ,
+TRIM(email_address) ,
+addr_type_code ,
+TRIM(address_line_1) ,
+TRIM(address_line_2) ,
+TRIM(city) ,
+TRIM(state_cd) ,
+county_name ,
+TRIM(zip) ,
+TRIM(zip_pls_4) ,
+mailing_addr_type_code ,
+TRIM(mailing_address_line_1) ,
+TRIM(mailing_address_line_2) ,
+TRIM(mailing_city) ,
+TRIM(mailing_state_cd) ,
+mailing_county_name ,
+TRIM(mailing_zip) ,
+TRIM(mailing_zip_pls_4) ,
+mbrshp_eff_dt ,
+mbrship_term_dt ,
+hlth_pln_updt_dt ,
+pcp_prov_id ,
+pcp_site_cd ,
+TRIM(pcp_strt_dt) ,
+TRIM(pcp_end_dt) ,
+mbr_snf_id ,
+TRIM(pln_type) ,
+TRIM(plan_desc) ,
+TRIM(clnt_hlth_pln_div) ,
+clnt_hlth_pln_grp_nbr ,
+contract_number ,
+do_not_call ,
+do_not_mail ,
+clnt_hlth_plan_st ,
+risk_stratification_lvl ,
+mbrshp_sys_id ,
+adr_begin_dt ,
+adr_end_dt ,
+language_preference_name ,
+pbp ,
+TRIM(insured_plan_effective_date) ,
+TRIM(insured_plan_termination_date) ,
+src_load_date ,
+src_update_date ,
+TRIM(row_status_code) ,
+rank_CCM_ERROR as seq_id,
+df_watermarkid,
+--DQ.format_error(source_primary_key,clnt_hlth_pln_mbrshp_id,i_mdm,TRIM(hicn),clnt_hlth_pln_cd,first_name,last_name,date_of_birth,clnt_hlth_pln_div,clnt_hlth_pln_grp_nbr ,mbrshp_sys_id ,pbp,pcp_strt_dt,pcp_end_dt,insured_plan_effective_date,insured_plan_termination_date) AS (error_detail:chararray);
+FLATTEN(TOKENIZE(DQ.format_error_cdb(source_primary_key,clnt_hlth_pln_mbrshp_id,i_mdm,TRIM(hicn),clnt_hlth_pln_cd,first_name,last_name,date_of_birth,clnt_hlth_pln_div,clnt_hlth_pln_grp_nbr ,mbrshp_sys_id ,pbp,pcp_strt_dt,pcp_end_dt,insured_plan_effective_date,insured_plan_termination_date))) AS (error_cd: int);
+
+--Extract and Save the fields for error records
+CCM_ERROR_DESC_SAVE = FOREACH CCM_ERROR_R GENERATE
+source_name ,
+source_primary_key ,
+TRIM(clnt_hlth_pln_mbrshp_id) ,
+i_mdm ,
+TRIM(hicn) ,
+TRIM(medicaid_id) ,
+cms_mbi ,
+TRIM(clnt_hlth_pln_cd) ,
+TRIM(first_name) ,
+TRIM(last_name) ,
+TRIM(middle_initial) ,
+middle_name ,
+gender ,
+TRIM(date_of_birth) ,
+date_of_death ,
+phn_type ,
+TRIM(primary_phone_number) ,
+othr_phn_type ,
+TRIM(secondary_phone_number) ,
+TRIM(email_address) ,
+addr_type_code ,
+TRIM(address_line_1) ,
+TRIM(address_line_2) ,
+TRIM(city) ,
+TRIM(state_cd) ,
+county_name ,
+TRIM(zip) ,
+TRIM(zip_pls_4) ,
+mailing_addr_type_code ,
+TRIM(mailing_address_line_1) ,
+TRIM(mailing_address_line_2) ,
+TRIM(mailing_city) ,
+TRIM(mailing_state_cd) ,
+mailing_county_name ,
+TRIM(mailing_zip) ,
+TRIM(mailing_zip_pls_4) ,
+mbrshp_eff_dt ,
+mbrship_term_dt ,
+hlth_pln_updt_dt ,
+pcp_prov_id ,
+pcp_site_cd ,
+TRIM(pcp_strt_dt) ,
+TRIM(pcp_end_dt) ,
+mbr_snf_id ,
+TRIM(pln_type) ,
+TRIM(plan_desc) ,
+TRIM(clnt_hlth_pln_div) ,
+clnt_hlth_pln_grp_nbr ,
+contract_number ,
+do_not_call ,
+do_not_mail ,
+clnt_hlth_plan_st ,
+risk_stratification_lvl ,
+mbrshp_sys_id ,
+adr_begin_dt ,
+adr_end_dt ,
+language_preference_name ,
+pbp ,
+TRIM(insured_plan_effective_date) ,
+TRIM(insured_plan_termination_date) ,
+src_load_date ,
+src_update_date ,
+TRIM(row_status_code) ,
+rank_CCM_ERROR as seq_id,
+df_watermarkid;
+
+-- Store the error file
+STORE CCM_ERROR_DESC_SAVE INTO '$CCM_ERROR_PATH' USING PigStorage('\u0001');
+
+-- Store Error file with Error_Id
+STORE CCM_ERROR_DESC INTO '$CCM_ERROR_DETAILS_PATH$PARTITION' USING PigStorage ('\u0001');
+
+-- Load Error File
+CCM_ERROR_DESC_READ = LOAD '$CCM_ERROR_DETAILS_PATH$PARTITION' USING PigStorage ('\u0001');
+
+-- Exract Required fields from Error File
+CCM_ERROR_FILE = FOREACH CCM_ERROR_DESC_READ GENERATE
+$63 AS seq_id,
+$64 AS df_watermarkid,
+$65 AS error_id;
+
+--Load Reference Error Table
+ERROR_REF_L = LOAD '$TENANT_DBNAME.ce_error_codes' USING org.apache.hive.hcatalog.pig.HCatLoader();
+
+-- Filter for Active Errors only
+ERROR_REF = FILTER ERROR_REF_L BY TRIM(error_active) == 'Y';
+
+-- Join Error File and Reference Table
+ERROR_JOIN = JOIN ERROR_REF BY error_id, CCM_ERROR_FILE BY error_id USING 'replicated' PARALLEL $PARALLELISM;
+
+-- Extract required fields for 4th error details file
+ERROR_JOIN_STORE = FOREACH ERROR_JOIN GENERATE
+        CCM_ERROR_FILE::seq_id as seq_id,
+        ERROR_REF::error_id as error_id,
+        ERROR_REF::error_category as error_category,
+        ERROR_REF::error_detail as error_detail,
+        CCM_ERROR_FILE::df_watermarkid;
+
+-- Remove Duplicates
+ERROR_JOIN_STORE_DIST = DISTINCT ERROR_JOIN_STORE;
+
+-- Sort by Unique Id
+ERROR_JOIN_STORE_DIST_ORDERED = ORDER ERROR_JOIN_STORE_DIST BY seq_id;
+
+-- Store the error file
+STORE ERROR_JOIN_STORE_DIST_ORDERED INTO '$CCM_ERROR_DETAILS_PATH' USING PigStorage('\u0001');
+
+
+
+
+######################Python Script#############################
+
+from pig_util import outputSchema
+import datetime
+import re
+
+@outputSchema('max_snapshot_crt_date:chararray')
+def maxdate(Dates):
+        return str(max(Dates))
+
+@outputSchema('valid_date:boolean')
+def validate(date_text):
+        try:
+                datetime.datetime.strptime(date_text, '%Y-%m-%d')
+                return True
+        except ValueError:
+                return False
+
+@outputSchema('valid_date:boolean')
+def validateICUEDate(date_text):
+        try:
+                datetime.datetime.strptime(date_text, '%Y-%m-%d %H:%M:%S.%f')
+                return True
+        except ValueError:
+                return False
+
+@outputSchema('valid_hicn:boolean')
+def validate_hicn(hicn):
+        try:
+                return bool(re.match("^[a-zA-Z0-9]*$",hicn))
+        except ValueError:
+                return False
+
+@outputSchema('valid_cms_facl_id:boolean')
+def validate_cms_facl_id(cms_facl_id):
+        try:
+                return bool(re.match("^[a-zA-Z0-9]*$",cms_facl_id) and len(cms_facl_id) == 6)
+        except ValueError:
+                return False
+
+#@outputSchema('error_detail:chararray')
+@outputSchema('error_cd:chararray')
+def format_error_cdb(source_primary_key,clnt_hlth_pln_mbrshp_id,i_mdm,hicn,clnt_hlth_pln_cd,first_name,last_name,date_of_birth,clnt_hlth_pln_div,clnt_hlth_pln_grp_nbr ,mbrshp_sys_id ,pbp,pcp_strt_dt,pcp_end_dt,insured_plan_effective_date,insured_plan_termination_date):
+        error_cd="0"
+        error_msg=""
+        if not source_primary_key:
+                error_cd="1"
+                #error_msg+=" Null check failed for Column: source_primary_key "
+        if not clnt_hlth_pln_mbrshp_id or clnt_hlth_pln_mbrshp_id.strip() == '':
+                if error_cd == "0":
+                        error_cd="10"
+                else:   error_cd+=",10"
+                #error_msg+=" Null check failed for Column: clnt_hlth_pln_mbrshp_id"
+        if not i_mdm:
+                if error_cd == "0":
+                        error_cd="11"
+                else:   error_cd+=",11"
+                #error_msg+=" Null check failed for Column: i_mdm"
+        if not clnt_hlth_pln_cd or clnt_hlth_pln_cd.strip() == '':
+                if error_cd == "0":
+                        error_cd="12"
+                else:   error_cd+=",12"
+                #error_msg+=" Null check failed for Column: clnt_hlth_pln_cd"
+        if not first_name or first_name.strip() == '':
+                if error_cd == "0":
+                        error_cd="13"
+                else:   error_cd+=",13"
+                #error_msg+=" Null check failed for Column: first_name"
+        if not last_name or last_name.strip() == '':
+                if error_cd == "0":
+                        error_cd="14"
+                else:   error_cd+=",14"
+                #error_msg+=" Null check failed for Column: last_name"
+        if not date_of_birth or date_of_birth.strip() == '':
+                if error_cd == "0":
+                        error_cd="15"
+                else:   error_cd+=",15"
+                #error_msg+=" Null check failed for Column: date_of_birth"
+        if not clnt_hlth_pln_div or clnt_hlth_pln_div.strip() == '':
+                if error_cd == "0":
+                        error_cd="16"
+                else:   error_cd+=",16"
+                #error_msg+=" Null check failed for Column: clnt_hlth_pln_div"
+        if not clnt_hlth_pln_grp_nbr:
+                if error_cd == "0":
+                        error_cd="17"
+                else:   error_cd+=",17"
+                #error_msg+=" Null check failed for Column: clnt_hlth_pln_grp_nbr"
+        if not mbrshp_sys_id or mbrshp_sys_id.strip() == '':
+                if error_cd == "0":
+                        error_cd="18"
+                else:   error_cd+=",18"
+                #error_msg+=" Null check failed for Column: mbrshp_sys_id"
+        if not pbp or pbp.strip() == '':
+                if error_cd == "0":
+                        error_cd="19"
+                else:   error_cd+=",19"
+                #error_msg+=" Null check failed for Column: pbp"
+        #if not pcp_strt_dt or pcp_strt_dt.strip() == '':
+        #       if error_cd == "0":
+        #               error_cd="20"
+        #       else:   error_cd+=",20"
+                #error_msg+=" Null check failed for Column: pcp_strt_dt"
+        #if not pcp_end_dt or pcp_end_dt.strip() == '':
+        #       if error_cd == "0":
+        #               error_cd="21"
+        #       else:   error_cd+=",21"
+                #error_msg+=" Null check failed for Column: pcp_end_dt"
+        if not insured_plan_effective_date or insured_plan_effective_date.strip() == '':
+                if error_cd == "0":
+                        error_cd="22"
+                else:   error_cd+=",22"
+                #error_msg+=" Null check failed for Column: insured_plan_effective_date"
+        if not insured_plan_termination_date or insured_plan_termination_date.strip() == '':
+                if error_cd == "0":
+                        error_cd="23"
+                else:   error_cd+=",23"
+                #error_msg+=" Null check failed for Column: insured_plan_termination_date"
+        if not validate(date_of_birth):
+                if error_cd == "0":
+                        error_cd="24"
+                else:   error_cd+=",24"
+                #error_msg+=" Date format check failed for Column: date_of_birth"
+        if not validate(pcp_strt_dt):
+                if error_cd == "0":
+                        error_cd="25"
+                else:   error_cd+=",25"
+                #error_msg+=" Date format check failed for Column: pcp_strt_dt"
+        if not validate(pcp_end_dt):
+                if error_cd == "0":
+                        error_cd="26"
+                else:   error_cd+=",26"
+                #error_msg+=" Date format check failed for Column: pcp_end_dt"
+        if not validate(insured_plan_effective_date):
+                if error_cd == "0":
+                        error_cd="27"
+                else:   error_cd+=",27"
+                #error_msg+=" Date format check failed for Column: insured_plan_effective_date"
+        if not validate(insured_plan_termination_date):
+                if error_cd == "0":
+                        error_cd="28"
+                else:   error_cd+=",28"
+                #error_msg+=" Date format check failed for Column: insured_plan_termination_date"
+        if not validate_hicn(hicn):
+                if error_cd == "0":
+                        error_cd="29"
+                else:   error_cd+=",29"
+                #error_msg+=" HICN Format check failed for Column: hicn"
+        #if (error_cd == 50):
+    #error_msg+=" " + u'\u0001' + " Null Check "
+    #if (error_cd == 51):
+    #error_msg+= " " + u'\u0001' + " Date Format Check "
+    #if (error_cd == 52):
+    #error_msg+= " " + u'\u0001' + " Both Null and Date Format Check "
+    #if (error_cd == 53):
+    #error_msg+= " " + u'\u0001' + " HICN Format Check "
+    #return (error_msg)
+        return (error_cd)
+
+
+@outputSchema('error_cd:chararray')
+def format_error_icue(source_primary_key, authorization_id, notification_create_date, hlth_pln_mbrshp_id, div_cd, grp_nbr, hlth_pln_id, src_sys_nm):
+        error_cd="0"
+        error_msg=""
+        if not source_primary_key:
+                error_cd="1"
+                #error_msg+=" Null check failed for Column: source_primary_key "
+        if not authorization_id:
+                if error_cd == "0":
+                        error_cd="2"
+                else:   error_cd+=",2"
+                            #error_msg+=" Null check failed for Column: authorization_id "
+        if not validateICUEDate(notification_create_date):
+                if (error_cd == "0"):
+                        error_cd="3"
+                else:   error_cd+=",3"
+                #error_msg+=" Date format check failed for Column: notification_create_date "
+        if not notification_create_date or notification_create_date.strip() == '':
+                if (error_cd == "0"):
+                        error_cd="4"
+                else:   error_cd+=",4"
+                #error_msg+=" Null check failed for Column: notification_create_date "
+        if not hlth_pln_mbrshp_id:
+                if (error_cd == "0"):
+                        error_cd="5"
+                else:   error_cd+=",5"
+                #error_msg+=" Null check failed for Column: hlth_pln_mbrshp_id"
+        if not div_cd:
+                if (error_cd == "0"):
+                        error_cd="6"
+                else:   error_cd+=",6"
+                #error_msg+=" Null check failed for Column: div_cd"
+        if not grp_nbr:
+                if (error_cd == "0"):
+                        error_cd="7"
+                else:   error_cd+=",7"
+                #error_msg+=" Null check failed for Column: grp_nbr"
+        if not hlth_pln_id:
+                if (error_cd == "0"):
+                        error_cd="8"
+                else:   error_cd+=",8"
+                #error_msg+=" Null check failed for Column: hlth_pln_id"
+        if not src_sys_nm:
+                if (error_cd == "0"):
+                        error_cd="9"
+                else:   error_cd+=",9"
+                #error_msg+=" Null check failed for Column: src_sys_nm"
+        #if (error_cd == 50):
+        #        error_msg+=" " + u'\u0001' + " Null Check "
+        #if (error_cd == 51):
+        #        error_msg+= " " + u'\u0001' + " Date Format Check "
+        #if (error_cd == 52):
+        #        error_msg+= " " + u'\u0001' + " Both Null and Date Format Check "
+        #return (error_msg)
+        return (error_cd)
+
+@outputSchema('error_cd:chararray')
+def format_error_ndb(source_primary_key, uhc_prov_id, cos_div_cd, cms_facl_id):
+        error_cd="0"
+        error_msg=""
+        if not source_primary_key:
+                error_cd="1"
+                #error_msg+=" Null check failed for Column: source_primary_key "
+        if not uhc_prov_id:
+                if error_cd == "0":
+                        error_cd="30"
+                else:   error_cd+=",30"
+                            #error_msg+=" Null check failed for Column: authorization_id "
+        if not cos_div_cd:
+                if (error_cd == "0"):
+                        error_cd="31"
+                else:   error_cd+=",31"
+                #error_msg+=" Date format check failed for Column: notification_create_date "
+        if not validate_cms_facl_id(cms_facl_id):
+                if error_cd == "0":
+                        error_cd="33"
+                else:   error_cd+=",33"
+                #error_msg+=" Format check failed for Column: cms_facl_id"
+        return (error_cd)
+
+@outputSchema('error_cd:chararray')
+def format_error_ndbhc(source_primary_key, uhc_prov_id, cos_div_cd, cms_facl_id):
+        error_cd="0"
+        error_msg=""
+        if not source_primary_key:
+                error_cd="1"
+                #error_msg+=" Null check failed for Column: source_primary_key "
+        if not uhc_prov_id:
+                if error_cd == "0":
+                        error_cd="30"
+                else:   error_cd+=",30"
+                            #error_msg+=" Null check failed for Column: authorization_id "
+        if not cos_div_cd:
+                if (error_cd == "0"):
+                        error_cd="31"
+                else:   error_cd+=",31"
+                #error_msg+=" Date format check failed for Column: notification_create_date "
+        if not validate_cms_facl_id(cms_facl_id):
+                if error_cd == "0":
+                        error_cd="33"
+                else:   error_cd+=",33"
+                #error_msg+=" Format check failed for Column: cms_facl_id"
+        return (error_cd)
+
+
