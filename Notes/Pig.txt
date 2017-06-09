@@ -1158,3 +1158,87 @@ def format_error_ndbhc(source_primary_key, uhc_prov_id, cos_div_cd, cms_facl_id)
         return (error_cd)
 
 
+####Loader Input Format Class
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.JobContext;
+import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.LineRecordReader;
+
+public class LoaderInputFormat extends FileInputFormat<LongWritable, Text>
+{
+  public RecordReader<LongWritable, Text> createRecordReader(InputSplit split, TaskAttemptContext context)
+  {
+    String delimiter = "\002";
+    byte[] recordDelimiterBytes = null;
+    if (delimiter != null)
+      recordDelimiterBytes = delimiter.getBytes();
+    return new LineRecordReader(recordDelimiterBytes);
+  }
+
+  protected boolean isSplitable(JobContext context, Path file)
+  {
+    CompressionCodec codec = 
+      new CompressionCodecFactory(context.getConfiguration()).getCodec(file);
+    return codec == null;
+  }
+}
+
+####New Pig Storage
+
+import org.apache.hadoop.mapreduce.InputFormat;
+import org.apache.pig.builtin.PigStorage;
+
+public class NewPigStorage extends PigStorage
+{
+  public NewPigStorage(String delimiter)
+  {
+    super(delimiter);
+  }
+
+  public NewPigStorage()
+  {
+  }
+
+  public InputFormat getInputFormat() {
+    return new LoaderInputFormat();
+  }
+}
+
+
+
+####Null to Space
+
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+
+public class ConvertNullToSpace extends EvalFunc<String>
+{
+  private static int numOfArguments;
+
+  public String exec(Tuple input)
+    throws IOException
+  {
+    try
+    {
+      numOfArguments = input.size();
+      String columnValue = (String)input.get(0);
+      if (numOfArguments == 1) {
+        if (columnValue == null) {
+          return " ";
+        }
+        return columnValue;
+      }
+      return columnValue;
+    } catch (Exception e) {
+      throw new IOException("Caught exception processing input row" + e);
+    }
+  }
+}
