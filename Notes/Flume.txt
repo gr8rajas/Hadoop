@@ -1,0 +1,20 @@
+1. Download Flume from https://flume.apache.org/download.html
+
+copy 'apache-flume-1.7.0-bin.tar.gz' file into '/home/app' folder
+
+2. extract 'apache-flume-1.7.0-bin.tar.gz' file into '/home/app' folder
+
+3. update '~/.bashrc' file with below changes
+
+command: gedit ~/.bashrc
+
+export FLUME_HOME=/home/app/apache-flume-1.7.0-bin
+export PATH=$FLUME_HOME/bin:$PATH
+
+4. re-open the terminal
+	
+5. verify with below command
+	
+echo $FLUME_HOME
+
+you will get the path
