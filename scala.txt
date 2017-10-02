@@ -1,0 +1,86 @@
+//Recursive Sum
+def sum(x: Int, y: Int): Int = {
+  if(x>y) 0 else x + sum(x+1,y)
+}
+
+sum(3,10)
+
+//Fibnocci
+  def fib(x: Int) = {
+    var pre = 0
+    var cur = 1
+    var res = 0
+    for (i <- pre to x) {
+      res = pre + cur
+      pre = cur
+      cur = res
+      print("\t" + res)
+    }
+  }
+
+fib(10)
+
+//Factorial
+var ini = 1
+for (f: Int  <- 5 to 2 by -1)
+  ini = ini * f
+  println(ini)
+*/
+
+
+//functions
+
+def fact(x: Int) ={
+var result =1
+  for ( i <- x to 1 by -1)
+result = result*i
+  result
+}
+
+val z = fact(5)
+
+ //Recursive function
+def fact(i: Int) : Int = if(i==1) 1 else i * fact(i-1)
+
+fact(6)
+
+
+//Practice
+val x = 90.toDouble
+val y: Int = 100
+
+
+val z = {
+  val i =1
+  val j = math.pow(2,10)
+  i-j
+}
+val i = (math.random * 100).toInt
+
+val j = (math.random * 100).toInt
+
+if(i>j)
+  { print(i) } else if (i==j)
+  { print("equal") }
+
+
+//Ternary operator
+if(i>j) i else j
+
+//
+While
+var ctr = 96
+while(ctr>= j)
+{
+  println(ctr)
+  ctr -=1
+}
+
+
+//For loop
+for (e: Int <- 100 to 30 by -2)
+{
+    println(e)
+}
+
+
