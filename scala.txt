@@ -1,6 +1,12 @@
 //Implicit Class(A class marked with implicit keyword)
 The class will be in Objects Scope.Must be defined inside a object/trait/class
 
+//implicit class RichDate(date: java.util.Date) // OK!(May take one Argument
+
+//object Bar
+//implicit class Bar(x: Int) // BAD!
+//val x = 5
+//implicit class x(y: Int) // BAD!
 
 
 //Recursive Sum
