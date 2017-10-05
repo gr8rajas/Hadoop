@@ -1,3 +1,8 @@
+//Implicit Class(A class marked with implicit keyword)
+The class will be in Objects Scope.Must be defined inside a object/trait/class
+
+
+
 //Recursive Sum
 def sum(x: Int, y: Int): Int = {
   if(x>y) 0 else x + sum(x+1,y)
