@@ -1,3 +1,29 @@
+//Expressions(xs can be a list)
+xs.map(x => x + 1)  is equivalent to    for (x <- xs) yield x + 1
+xs.filter(x => x % 2 == 0)   is equivalent to     for (x <- xs if x % 2 == 0) yield x
+xs.flatMap(x => ys.map(y => (x, y)))   is equivalent to    for (x <- xs; y <- ys) yield (x, y)
+
+//Override
+ override def toString = numer + "/" + denom   the modifier override declares that toString redefines a method that already exists
+
+//Test
+require is a predefined function. It takes a condition and an optional message string. If the condition passed to require is false, an IllegalArgumentException is thrown with the given message string.
+require is used to enforce a precondition on the caller of a function.
+assert is used as to check the code of the function itself
+
+//Abstract class
+Abstract classes can contain members which are missing an implementation.
+Consequently, no instances of an abstract class can be created with the operator new
+
+//Passing arbitrary number of values as parameters
+def average(x: Int, xs: Int*): Double = {}
+
+Sometimes you want to supply each element of a list as as many parameters. You can do that by adding a : _* type ascription to your list: val xs: List[Int] = …
+average(1, xs: _*)
+
+Classes, objects and traits can inherit from at most one class but arbitrary many traits:
+
+
 //Implicit Class(A class marked with implicit keyword)
 The class will be in Objects Scope.Must be defined inside a object/trait/class
 
